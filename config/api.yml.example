@@ -1,0 +1,4 @@
+# get keys at: https://bitfinex.com/account/api
+---
+key: 'your_key_here'
+secret: 'your_secret_here'

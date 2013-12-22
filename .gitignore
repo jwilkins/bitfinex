@@ -1,3 +1,4 @@
+config/api.yml
 *.gem
 *.rbc
 .bundle
