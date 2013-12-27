@@ -169,7 +169,7 @@ bfx = BitFinex.new
 
 #puts bfx.lends
 #puts bfx.trades
-#puts bfx.symbols
+puts bfx.symbols
 #puts bfx.ticker
 #puts bfx.today
 #puts bfx.candles
