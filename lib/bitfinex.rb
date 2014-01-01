@@ -37,7 +37,6 @@ class BitFinex
       end
     end
     @exchanges = ["bitfinex", "bitstamp", "all"] # all = no routing
-
   end
 
   def have_key?
@@ -48,7 +47,7 @@ class BitFinex
     payload = {}
     payload['request'] = url
     # nonce needs to be a string, server error is wrong
-    payload['nonce'] = Time.now.to_i.to_s
+    payload['nonce'] = (Time.now.to_f * 10000).to_i.to_s
     payload.merge!(options)
 
     payload_enc = Base64.encode64(payload.to_json).gsub(/\s/, '')
@@ -62,10 +61,65 @@ class BitFinex
   end
 
   # --------------- authenticated -----------------
+  def orders
+    return nil unless have_key?
+    url = "/v1/orders"
+    self.class.post(url, :headers => headers_for(url)).parsed_response
+
+  end
+
+  def positions
+    return nil unless have_key?
+    url = "/v1/positions"
+    self.class.post(url, :headers => headers_for(url)).parsed_response
+
+  end
+
+  def offers
+    return nil unless have_key?
+    url = "/v1/offers"
+    self.class.post(url, :headers => headers_for(url)).parsed_response
+
+  end
+
+  def credits
+    return nil unless have_key?
+    url = "/v1/credits"
+    self.class.post(url, :headers => headers_for(url)).parsed_response
+
+  end
+
   def balances
     return nil unless have_key?
     url = "/v1/balances"
     self.class.post(url, :headers => headers_for(url)).parsed_response
+  end
+
+  def history(sym='btcusd', limit=9100, start=0)
+    return nil unless have_key?
+    url = "/v1/mytrades"
+    options = {
+      'symbol' => sym,
+      'timestamp' => start,
+      'limit_trades' => limit
+    }
+    begin
+    hist = self.class.post(url, :headers => headers_for(url, options)).parsed_response
+    hist.each { |tx|
+      tx['timestamp'] = Time.at(tx['timestamp'].to_f).strftime("%Y%m%d %H:%M:%S")
+    }
+    rescue => e
+      puts hist
+      puts e
+      byebug
+    end
+    hist.reverse
+  end
+
+  def history_all
+    {:btcusd => history('btcusd'),
+     :ltcusd => history('ltcusd'),
+     :ltcbtc => history('ltcbtc')}
   end
 
   def status(order_id)
@@ -169,12 +223,22 @@ bfx = BitFinex.new
 
 #puts bfx.lends
 #puts bfx.trades
-puts bfx.symbols
+#puts bfx.symbols
 #puts bfx.ticker
 #puts bfx.today
 #puts bfx.candles
 
 #puts bfx.balances
+hist = bfx.history('ltcbtc')
+puts hist
+puts hist.length
+open('history-ltcbtc.csv', 'w+'){ |ff|
+  ff << "#price, amount, time, exchange, type\n"
+  hist.each { |tx|
+    ff << "#{tx['price']}, #{tx['amount']}, #{tx['timestamp']}, #{tx['exchange']}, #{tx['type']}\n"
+  }
+}
+exit
 puts bfx.status(4627020)
 puts bfx.cancel(4627020)
 puts bfx.status(4627020)
