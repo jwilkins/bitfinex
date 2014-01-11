@@ -1,0 +1,40 @@
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+
+bfx = BitFinex.new
+
+orders = []
+
+10.times {
+  res = bfx.order(0.01337, 1300.0, 'limit', 'btcusd', 'bitstamp')
+
+  #  message key is only present on error
+  if res['message']
+    puts "Error: #{res['message']}"
+    exit
+  end
+
+  orderid = res['order_id']
+  puts "Placed order #{orderid} (#{res['original_amount']} @ #{res['price']})"
+
+  # Wait for order to execute/be cancelled before buying more
+  while(res['is_live']) do
+    res = bfx.status(orderid)
+
+    puts "  executed: #{res['executed_amount']}/remaining: #{res['remaining_amount']}"
+    puts "pausing before next order ... "
+    sleep 60
+  end
+}
+
+# Messages:
+# initial order response
+# res =>  {"id"=>5421907, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334322.888538915", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0", "order_id"=>5421907}
+
+#pending
+# res => "id"=>5421963, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334540.0", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0"}
+
+# finished
+# res => {"id"=>5421963, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"814.65", "side"=>"sell", "type"=>"limit", "timestamp"=>"1389334540.0", "is_live"=>false, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.0", "executed_amount"=>"0.01"}

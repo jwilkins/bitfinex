@@ -15,3 +15,8 @@ puts OpenSSL::X509::DEFAULT_CERT_FILE
 puts OpenSSL::X509::DEFAULT_CERT_DIR
 
 And either add it to the cert file or drop it in the directory and run c_rehash
+
+
+TODO
+====
+http://www.set50.com/cgi-bin/formula.asp#Stochastic%20and%20RSI%20System

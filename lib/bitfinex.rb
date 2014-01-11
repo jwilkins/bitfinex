@@ -153,6 +153,14 @@ class BitFinex
     self.class.post(url, :headers => headers_for(url, options)).parsed_response
   end
 
+  def sell_btc(size, price=nil, routing='all', type='limit', hide=false)
+    order(size, price, type, 'btcusd',  routing, 'sell', hide)
+  end
+
+  def buy_btc(size, price=nil, routing='all', type='limit', hide=false)
+    order(size, price, type, 'btcusd',  routing, 'buy', hide)
+  end
+
   def order(size, price=nil, type='limit', sym='btcusd', routing='all', side='buy', hide=false)
     return nil unless have_key?
     url = "/v1/order/new"

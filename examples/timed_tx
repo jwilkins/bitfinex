@@ -1,0 +1,98 @@
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+require 'docopt'
+
+doc = <<DOCOPT
+#{__FILE__}
+
+Usage:
+  #{__FILE__} (buy|sell) <amount> [at <price>] [<times> times] [on (bitfinex|bitstamp)] [options]
+  #{__FILE__} -h | --help
+  #{__FILE__} --version
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+  -i <sec>      Time between sells
+  -f            Route sales only through Bitfinex
+  -s            Route sales only through Bitstamp
+
+DOCOPT
+
+opts = Docopt::docopt(doc)
+
+amount = 0
+price = nil
+action = :buy_btc
+count = 1
+interval = 15
+routing = 'all'
+
+begin
+  if(opts['buy'])
+    action = :buy_btc
+  elsif(opts['sell'])
+    action = :sell_btc
+  else
+    raise "specify buy or sell"
+  end
+
+  amount = opts["<amount>"].to_f
+
+  price = opts["<price>"].to_f if(opts['at'])
+
+  count = opts['<times>'].to_i if (opts['<times>'])
+
+  interval = opts['-i'].to_i if opts['-i']
+
+  routing = 'bitfinex' if opts['bitfinex'] || opts['-f']
+  routing = 'bitstamp' if opts['bitfinex'] || opts['-s']
+
+rescue Docopt::Exit => e
+  puts e.message
+  exit
+end
+
+puts "[*] timed_tx"
+puts "Will:"
+puts "  #{action} #{amount} @ #{price} #{count} time(s)"
+puts "  on #{routing} exchange(s)"
+puts "  1 order every #{interval} seconds" if count > 1
+puts "pausing 10 seconds, hit ctrl-c to abort"
+sleep 10
+
+
+bfx = BitFinex.new
+
+orders = []
+
+count.times {
+  res = bfx.send(action, amount, price, routing)
+
+  if res['message']
+    puts "Error: #{res['message']}"
+    exit
+  end
+
+  orderid = res['order_id']
+  orders << orderid
+  puts "Placed order #{orderid} (#{res['original_amount']} @ #{res['price']})"
+
+  while(res['is_live']) do
+    sleep(interval)
+    res = bfx.status(orderid)
+    puts "  executed: #{res['executed_amount']}/remaining: #{res['remaining_amount']}"
+  end
+}
+
+# initial order response
+# =>  {"id"=>5421907, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334322.888538915", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0", "order_id"=>5421907}
+
+# status pending
+# => "id"=>5421963, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334540.0", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0"}
+
+# status executed
+# => {"id"=>5421963, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"814.65", "side"=>"sell", "type"=>"limit", "timestamp"=>"1389334540.0", "is_live"=>false, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.0", "executed_amount"=>"0.01"}
+
