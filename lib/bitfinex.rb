@@ -40,6 +40,7 @@ class BitFinex
   end
 
   def have_key?
+    # validate access & memoize
     @key && @secret
   end
 
@@ -65,28 +66,24 @@ class BitFinex
     return nil unless have_key?
     url = "/v1/orders"
     self.class.post(url, :headers => headers_for(url)).parsed_response
-
   end
 
   def positions
     return nil unless have_key?
     url = "/v1/positions"
     self.class.post(url, :headers => headers_for(url)).parsed_response
-
   end
 
   def offers
     return nil unless have_key?
     url = "/v1/offers"
     self.class.post(url, :headers => headers_for(url)).parsed_response
-
   end
 
   def credits
     return nil unless have_key?
     url = "/v1/credits"
     self.class.post(url, :headers => headers_for(url)).parsed_response
-
   end
 
   def balances
@@ -104,14 +101,12 @@ class BitFinex
       'limit_trades' => limit
     }
     begin
-    hist = self.class.post(url, :headers => headers_for(url, options)).parsed_response
-    hist.each { |tx|
-      tx['timestamp'] = Time.at(tx['timestamp'].to_f).strftime("%Y%m%d %H:%M:%S")
-    }
+      hist = self.class.post(url, :headers => headers_for(url, options)).parsed_response
+      hist.each { |tx|
+        tx['timestamp'] = Time.at(tx['timestamp'].to_f).strftime("%Y%m%d %H:%M:%S")
+      }
     rescue => e
-      puts hist
       puts e
-      byebug
     end
     hist.reverse
   end
@@ -153,41 +148,48 @@ class BitFinex
     self.class.post(url, :headers => headers_for(url, options)).parsed_response
   end
 
-  def sell_btc(size, price=nil, routing='all', type='limit', hide=false)
-    order(size, price, type, 'btcusd',  routing, 'sell', hide)
+  def sell_btc(amount, price=nil, opts={})
+    oh = {routing: 'all', type: 'limit', hide: false}.merge(opts)
+    order(amount, price, oh[:type], 'btcusd',  oh[:routing], 'sell', oh[:hide])
   end
 
-  def buy_btc(size, price=nil, routing='all', type='limit', hide=false)
-    order(size, price, type, 'btcusd',  routing, 'buy', hide)
+  def buy_btc(amount, price=nil, opts={})
+    oh = {routing: 'all', type: 'limit', hide: false}.merge(opts)
+    order(amount, price, oh[:type], 'btcusd',  oh[:routing], 'buy', oh[:hide])
   end
 
-  def order(size, price=nil, type='limit', sym='btcusd', routing='all', side='buy', hide=false)
+  def order(amount, price=nil, opts={})
     return nil unless have_key?
     url = "/v1/order/new"
+
+    oh = {type:'limit', sym:'btcusd', routing:'all', side:'buy'}.merge(opts)
+    # using negative amounts as shorthand for a sell
+    if amount < 0
+      amount = amount.abs.to_s
+      oh[:side] = 'sell'
+    end
+
     order = {
-      'symbol' => sym,
-      'amount' => size.to_s,
-      'exchange' => routing,
-      'side' => side,
-      'type' => type
+      'symbol' => oh[:sym],
+      'amount' => amount.to_s,
+      'exchange' => oh[:routing],
+      'side' => oh[:side],
+      'type' => oh[:type]
     }
 
     unless price
       # no price if market order
-      type = 'market'
+      order['type'] = 'market'
     else
-      order[:price] = price.to_s unless type == 'market'
+      # raise "price specified but order type set to market"
+      order[:price] = price.to_s unless oh[:type] == 'market'
     end
 
-    if size < 0
-      size = size.abs.to_s
-      side = 'sell'
-    end
-
-    order['is_hidden'] = true if hide
+    order['is_hidden'] = true if oh[:hide]
 
     self.class.post(url, :headers => headers_for(url, order)).parsed_response
   end
+
   # --------------- unauthenticated -----------------
   def ticker(sym='btcusd', options={})
     self.class.get("/v1/ticker/#{sym}", options).parsed_response

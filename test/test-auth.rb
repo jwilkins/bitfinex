@@ -12,22 +12,29 @@ testing "Authenticated calls" do
 
   testing 'orders' do
     orders = @bfx.orders
-    puts orders
+    isnt orders, nil, "orders isn't nil"
+    ok bal.class == Array, "orders is an array"
   end
 
   testing 'positions' do
     positions = @bfx.positions
-    puts positions
+    isnt positions, nil, "positions isn't nil"
+    ok positions.class == Array, "positions is an array"
+    if positions.length > 0
+      ok positions.first['id'].class == Integer, "position entry has an id key, value integer"
+    end
   end
 
   testing 'offers' do
     offers = @bfx.offers
-    puts offers
+    isnt offers, nil, "offers isn't nil"
+    ok offers.class == Array, "offers is an array"
   end
 
   testing 'credits' do
     credits = @bfx.credits
-    puts credits
+    isnt credits, nil, "credits isn't nil"
+    ok credits.class == Array, "credits is an array"
   end
 
   testing 'balances' do
