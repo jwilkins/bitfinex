@@ -1,3 +1,4 @@
+#!/usr/bin/env ruby
 $: << File.join(File.dirname(__FILE__), '..', 'lib')
 $: << File.join(File.dirname(__FILE__))
 
@@ -6,9 +7,9 @@ require 'bitfinex'
 bfx = BitFinex.new
 
 orders = []
-
 10.times {
-  res = bfx.order(0.01337, 1300.0, 'limit', 'btcusd', 'bitstamp')
+  started = Time.now
+  res = bfx.order(0.01337, 1300.0, routing: 'bitfinex')
 
   #  message key is only present on error
   if res['message']
@@ -17,15 +18,20 @@ orders = []
   end
 
   orderid = res['order_id']
-  puts "Placed order #{orderid} (#{res['original_amount']} @ #{res['price']})"
+  puts "[#{Time.now.strftime("%H:%M:%S")}] Placed order #{orderid} (#{res['original_amount']} @ #{res['price']})"
 
   # Wait for order to execute/be cancelled before buying more
   while(res['is_live']) do
     res = bfx.status(orderid)
 
     puts "  executed: #{res['executed_amount']}/remaining: #{res['remaining_amount']}"
-    puts "pausing before next order ... "
-    sleep 60
+    sleep 6 if res['is_live']
+  end
+  wait_time = 60 - (Time.now - started)
+
+  if wait_time > 0
+    puts "pausing #{wait_time} before next order ... "
+    sleep wait_time 
   end
 }
 

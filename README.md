@@ -4,6 +4,17 @@ bitfinex
 Ruby library for Bitfinex.com
 Work in progress, contributions welcome but keep in mind that the official docs seem to refer to an older version of their API.  Eg, signatures are now computed with an HMAC.
 
+CLI for Bitfinex
+================
+./timed_tx sell 1 at 1000 on bitfinex -x 10 -i 60
+  [*] timed_tx
+  Will:
+    sell 1.0 BTC @ 845.0 USD 10 time(s)
+    on bitfinex
+    1 order every 60 seconds
+  pausing 10 seconds, hit ctrl-c to abort
+  Placed order 5584165 (1.0 @ 1000.0), waiting for completion ..
+
 SSL Certificates
 ================
 If you're on OSX, you will probably need to install the RapidSSL CA bundle, (included in the support dir).

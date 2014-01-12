@@ -36,7 +36,7 @@ class BitFinex
       rescue
       end
     end
-    @exchanges = ["bitfinex", "bitstamp", "all"] # all = no routing
+    @exchanges = ["BFX", "BSTP", "all"] # all = no routing
   end
 
   def have_key?
@@ -71,7 +71,12 @@ class BitFinex
   def positions
     return nil unless have_key?
     url = "/v1/positions"
-    self.class.post(url, :headers => headers_for(url)).parsed_response
+    pos = self.class.post(url, :headers => headers_for(url)).parsed_response
+    %w(base amount timestamp swap pl).each { |kk|
+      pos[kk] = pos[kk].to_f
+    }
+    pos['timestamp'] = Time.at(pos['timestamp'])
+    pos
   end
 
   def offers
@@ -148,14 +153,30 @@ class BitFinex
     self.class.post(url, :headers => headers_for(url, options)).parsed_response
   end
 
-  def sell_btc(amount, price=nil, opts={})
-    oh = {routing: 'all', type: 'limit', hide: false}.merge(opts)
-    order(amount, price, oh[:type], 'btcusd',  oh[:routing], 'sell', oh[:hide])
+  def sell_bstp(amount, price=nil, opts={})
+    sell(amount, price, opts.merge({routing: 'bstp'}))
   end
 
-  def buy_btc(amount, price=nil, opts={})
-    oh = {routing: 'all', type: 'limit', hide: false}.merge(opts)
-    order(amount, price, oh[:type], 'btcusd',  oh[:routing], 'buy', oh[:hide])
+  def sell_bfx(amount, price=nil, opts={})
+    sell(amount, price, opts.merge({routing: 'bitfinex'}))
+  end
+
+  def sell(amount, price=nil, opts={})
+    oh = {side: 'sell', routing: 'all', type: 'limit', hide: false}.merge(opts)
+    order(amount, price, oh)
+  end
+
+  def buy_bstp(amount, price=nil, opts={})
+    buy(amount, price, opts.merge({routing: 'bitstamp'}))
+  end
+
+  def buy_bfx(amount, price=nil, opts={})
+    buy(amount, price, opts.merge({routing: 'bitfinex'}))
+  end
+
+  def buy(amount, price=nil, opts={})
+    oh = {side: 'buy', routing: 'all', type: 'limit', hide: false}.merge(opts)
+    order(amount, price, oh)
   end
 
   def order(amount, price=nil, opts={})
@@ -192,7 +213,12 @@ class BitFinex
 
   # --------------- unauthenticated -----------------
   def ticker(sym='btcusd', options={})
-    self.class.get("/v1/ticker/#{sym}", options).parsed_response
+    tick = self.class.get("/v1/ticker/#{sym}", options).parsed_response
+    tick.keys.each { |kk|
+      tick[kk] = tick[kk].to_f
+    }
+    tick['timestamp'] = Time.at(tick['timestamp'])
+    tick
   end
 
   # documented, but not available
