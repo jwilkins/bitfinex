@@ -8,7 +8,7 @@ require 'knock'
 include Knock
 
 testing "Unauthenticated calls" do
-  @bfx = BitFinex.new
+  @bfx = Bitfinex.new
 
   testing "foo" do
     pass
@@ -23,32 +23,33 @@ testing "Unauthenticated calls" do
   end
 
   testing "candles" do
-    res = @bfx.candles('btcusd')
-    puts res
-    isnt res, nil
+    puts "candles deprecated?"
+    #res = @bfx.candles('btcusd')
+    #puts res
+    #isnt res, nil
   end
 
   testing "orderbook" do
     res = @bfx.orderbook('btcusd')
-    puts res
+    #puts res
     isnt res, nil
   end
 
   testing "lendbook" do
     res = @bfx.lendbook('btc')
-    puts res
+    #puts res
     isnt res, nil
   end
 
   testing "lends" do
     res = @bfx.lends('btcusd')
-    puts res
+    #puts res
     isnt res, nil
   end
 
   testing "trades" do
     res = @bfx.trades('btcusd')
-    puts res
+    #puts res
     isnt res, nil
   end
 end

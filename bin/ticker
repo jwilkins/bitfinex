@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+require 'docopt'
+
+doc = <<DOCOPT
+#{__FILE__}
+
+Usage:
+  #{__FILE__} 
+  #{__FILE__} -h | --help
+  #{__FILE__} --version
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+
+DOCOPT
+
+begin
+  opts = Docopt::docopt(doc)
+rescue Docopt::Exit => e
+  puts e.message
+  exit
+end
+
+  bfx = Bitfinex.new
+  ticker = bfx.ticker
+
+
+puts "Bid: #{ticker.bid}"
+puts "Ask: #{ticker.ask}"
+

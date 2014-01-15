@@ -87,53 +87,56 @@ class Bitfinex
   def orders
     return nil unless have_key?
     url = "/v1/orders"
-    Hashie::Mash.new(
-      self.class.post(url, :headers => headers_for(url)).parsed_response
-    )
+    self.class.post(url, :headers => headers_for(url)).parsed_response
   end
 
   def positions
     return nil unless have_key?
     url = "/v1/positions"
     pos = self.class.post(url, :headers => headers_for(url)).parsed_response
-    %w(base amount timestamp swap pl).each { |kk|
-      pos[kk] = pos[kk].to_f
+    raise "Error fetching positions" unless pos.class == Array
+    pos.each { |psn|
+      %w(base amount timestamp swap pl).each { |kk|
+        psn[kk] = psn[kk].to_f
+      }
+      psn['id'] = psn['id'].to_i
+      psn['timestamp'] = Time.at(psn['timestamp'])
     }
-    pos['timestamp'] = Time.at(pos['timestamp'])
-    Hashie::Mash.new(pos)
+    #Hashie::Mash.new(pos)
+    pos
   end
 
+  # requests for credit
   def offers
     return nil unless have_key?
     url = "/v1/offers"
-    Hashie::Mash.new(
+    #Hashie::Mash.new(
       self.class.post(url, :headers => headers_for(url)).parsed_response
-    )
   end
 
+  # credit extended to others
   def credits
     return nil unless have_key?
     url = "/v1/credits"
-    Hashie::Mash.new(
+    #Hashie::Mash.new(
       self.class.post(url, :headers => headers_for(url)).parsed_response
-    )
   end
 
   def balances
     return nil unless have_key?
     url = "/v1/balances"
-    Hashie::Mash.new(
+    #Hashie::Mash.new(
       self.class.post(url, :headers => headers_for(url)).parsed_response
-    )
   end
 
-  def history(opts={sym:'btcusd', limit:9100, start:0, reverse:false})
+  def history(opts={})
     return nil unless have_key?
     url = "/v1/mytrades"
+    ho = {sym:'btcusd', limit:9100, start:0, reverse:false}.merge(opts)
     options = {
-      'symbol' => sym,
-      'timestamp' => start,
-      'limit_trades' => limit
+      'symbol' => ho[:sym],
+      'timestamp' => ho[:start],
+      'limit_trades' => ho[:limit]
     }
     hist = []
     begin
@@ -150,7 +153,7 @@ class Bitfinex
     rescue => e
       puts e
     end
-    hist.reverse! if reverse
+    hist.reverse! if opts[:reverse]
     hist
   end
 
@@ -380,7 +383,8 @@ class Bitfinex
 
   # documented, but not available
   def candles(sym='btcusd', options={})
-    #Hashie::Mash.new(self.class.get("/v1/candles/#{sym}", options).parsed_response)
+    #Hashie::Mash.new(
+    #self.class.get("/v1/candles/#{sym}", options).parsed_response
     nil
   end
 
@@ -389,19 +393,23 @@ class Bitfinex
   end
 
   def lendbook(sym='btc')
-    Hashie::Mash.new(self.class.get("/v1/lendbook/#{sym}").parsed_response)
+    #Hashie::Mash.new(
+    self.class.get("/v1/lendbook/#{sym}").parsed_response
   end
 
   def trades(sym='btcusd')
-    Hashie::Mash.new(self.class.get("/v1/trades/#{sym}").parsed_response)
+    #Hashie::Mash.new(
+    self.class.get("/v1/trades/#{sym}").parsed_response
   end
 
   def lends(sym='btc')
-    Hashie::Mash.new(self.class.get("/v1/lends/#{sym}").parsed_response)
+    #Hashie::Mash.new(
+    self.class.get("/v1/lends/#{sym}").parsed_response
   end
 
   def symbols()
-    Hashie::Mash.new(self.class.get("/v1/symbols").parsed_response)
+    #Hashie::Mash.new(
+    self.class.get("/v1/symbols").parsed_response
   end
 end
 

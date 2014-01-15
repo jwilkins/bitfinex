@@ -13,7 +13,7 @@ testing "Authenticated calls" do
   testing 'orders' do
     orders = @bfx.orders
     isnt orders, nil, "orders isn't nil"
-    ok bal.class == Array, "orders is an array"
+    ok orders.class == Array, "orders is an array"
   end
 
   testing 'positions' do
@@ -21,7 +21,8 @@ testing "Authenticated calls" do
     isnt positions, nil, "positions isn't nil"
     ok positions.class == Array, "positions is an array"
     if positions.length > 0
-      ok positions.first['id'].class == Integer, "position entry has an id key, value integer"
+      isnt positions.first['id'], nil, "position entry has an id key"
+      ok positions.first['id'].class ==  Fixnum,"  value integer"
     end
   end
 
