@@ -1,0 +1,99 @@
+#!/usr/bin/env ruby
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+require 'docopt'
+
+doc = <<DOCOPT
+#{__FILE__}
+
+Usage:
+  #{__FILE__}  last <last>
+  #{__FILE__}  since <since>
+  #{__FILE__} -h | --help
+  #{__FILE__} --version
+
+Example, try:
+  #{__FILE__} since 1h
+  #{__FILE__} last 10 buy
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+
+DOCOPT
+
+Signal.trap("INT") do
+  puts "\nQuitting .."
+  exit(-1)
+end
+
+#begin
+  bought = 0.0
+  sold = 0.0
+  volume = 0.0
+
+  cost = 0.0
+  total_cost = 0.0
+  total_rev = 0.0
+
+  net = 0.0
+  since = nil
+  last = -1
+
+begin
+  opts = Docopt::docopt(doc)
+rescue Docopt::Exit => e
+  puts e.message
+  exit
+end
+
+  last = opts['<last>'].to_i if opts['last']
+  since = opts['<since>'].to_f if opts['since']
+
+  if opts['buy']
+  end
+
+  if opts['sell']
+  end
+
+  bfx = Bitfinex.new
+  hist = bfx.history(sym:'btcusd')
+
+  hist[0..last].each { |hh|
+    volume += hh.amount.abs
+    tx_value = hh.amount * hh.price
+    fee = tx_value * 0.0012 if hh.exchange == "bitfinex"
+    fee = tx_value * 0.0035 if hh.exchange == "bitstamp"
+    if hh.type == 'Buy'
+      bought += hh.amount.abs
+      tx_cost = tx_value + fee
+      total_cost += tx_cost
+      puts " #{"%6.02f" % hh.amount} @ #{"%6.02f" % hh.price} (#{tx_cost})+ "\
+           "#{"%6.02f" % fee} = #{"%6.02f" % tx_cost} (- #{"%0.02f" % total_cost})"
+    elsif hh.type == 'Sell'
+      sold += hh.amount
+      tx_cost = tx_value - fee
+      total_rev += tx_cost
+      puts "-#{"%6.02f" % hh.amount} @ #{"%6.02f" % hh.price} (#{tx_cost})- "\
+           "#{"%6.02f" % fee} = #{"%6.02f" % tx_cost} (+ #{"%0.02f" % total_rev})"
+    else
+      raise " invalid type: #{hh.type}"
+    end
+  }
+
+  puts "Total cost: #{"%0.02f" % total_cost} for #{"%0.02f" % bought} BTC"
+  puts "       avg: #{"%0.02f" % (total_cost/bought)}"
+  puts "Total return: #{"%0.02f" % total_rev} for #{"%0.02f" % sold} BTC"
+  puts "         avg: #{"%0.02f" % (total_rev/sold)}"
+  if opts['buy'] && opts['sell']
+    net = total_rev - total_cost
+    puts "P/L: #{"%0.02f" % net}"
+  end
+
+
+#rescue => e
+#  puts e.message
+#  exit
+#end
