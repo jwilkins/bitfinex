@@ -13,15 +13,25 @@ Usage:
   #{__FILE__} -h | --help
   #{__FILE__} --version
 
+Example, try:
+  #{__FILE__} buy 0.3 on bitfinex
+  #{__FILE__} sell 0.1 on bitfinex -x 3
+
 Options:
   -h --help     Show this screen.
   --version     Show version.
-  -i <sec>      Time between sells
-  -x <times>    Repeat the order
+  -i <sec>      Time between sells [default: 15]
+  -x <times>    Repeat the order [default: 1]
+  -m            Market order
   -f            Route sales only through Bitfinex
   -s            Route sales only through Bitstamp
 
 DOCOPT
+
+Signal.trap("INT") do
+  puts "\nQuitting .."
+  exit(-1)
+end
 
 begin
   amount = 1
@@ -42,7 +52,13 @@ begin
 
   amount = opts["<amount>"].to_f
 
-  price = opts["<price>"].to_f if(opts['at'])
+  if(opts['at'])
+    price = opts["<price>"].to_f 
+  else
+    price = 1500 if action == :buy
+    price = 1 if action == :sell
+    opts['-m'] = true
+  end
 
   count = opts['-x'].to_i if (opts['-x'])
 
@@ -58,24 +74,29 @@ end
 
 puts "[*] timed_tx"
 puts "Will:"
-puts "  #{action} #{amount} BTC @ $#{"%0.02f" % price} USD #{count} time(s)"
+puts "  #{action} #{amount} BTC "
+puts "  @ $#{"%0.02f" % price} USD " if price
+puts "  #{count} time(s)" if count > 1
 puts "  on #{routing} " if routing != 'all'
 puts "  1 order every #{interval} seconds" if count > 1
 puts "pausing 10 seconds, hit ctrl-c to abort"
 sleep 10
 
 
-bfx = BitFinex.new
+bfx = Bitfinex.new
 
 orders = []
 
 count.times {
   started = Time.now
-  res = bfx.send(action, amount, price, {routing: routing})
-
-  if res['message']
-    puts "Error: #{res['message']}"
-    exit
+  begin
+    res = bfx.send(action, amount, price, {routing: routing})
+    if res['message']
+      puts "Error: #{res['message']}"
+      exit
+    end
+  rescue => e
+    puts "Error: #{e}"
   end
 
   orderid = res['order_id']
@@ -84,27 +105,23 @@ count.times {
 
   begin
     sleep(6)
-    res = bfx.status(orderid)
+    begin
+      res = bfx.status(orderid)
+    rescue => e
+      puts "Error: #{e}"
+    end
     puts "  executed: #{"%0.06f" % res['executed_amount']}/remaining: #{"%0.06f" % res['remaining_amount']}"
   end while(res['is_live']) 
-  avg_price = res['avg_execution_price'].to_f
-  total = (amount.to_f * avg_price)
-  puts "  #{action} #{amount} at average price: #{"%0.02f" % avg_price} = #{"%0.02f" % total}"
+  #avg_price = res['avg_execution_price'].to_f
+  #total = (amount.to_f * avg_price)
+  #puts "  #{action} #{amount} at average price: #{"%0.02f" % avg_price} = #{"%0.02f" % total}"
+  puts "  #{bfx.summarize_orders([orderid])}"
 
   wait_time = (interval - (Time.now - started))
   sleep(wait_time) if wait_time > 0
 }
 
-# XXX: summary
-total_btc = 0.0
-total_price = 0.0
-orders.each { |oo|
-  res = bfx.status(oo)
-  total_btc += res['executed_amount'].to_f
-  total_price += res['avg_execution_price'].to_f
-}
-total_usd = (total_price/orders.length) * total_btc
-puts "Total #{"%0.06f" % total_btc} sold for ~$#{total_usd}"
+puts bfx.summarize_orders(orders)
 
 # initial order response
 # =>  {"id"=>5421907, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334322.888538915", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0", "order_id"=>5421907}

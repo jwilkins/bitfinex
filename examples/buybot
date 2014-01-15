@@ -4,7 +4,7 @@ $: << File.join(File.dirname(__FILE__))
 
 require 'bitfinex'
 
-bfx = BitFinex.new
+bfx = Bitfinex.new
 
 orders = []
 10.times {
@@ -18,6 +18,8 @@ orders = []
   end
 
   orderid = res['order_id']
+  orders << orderid
+
   puts "[#{Time.now.strftime("%H:%M:%S")}] Placed order #{orderid} (#{res['original_amount']} @ #{res['price']})"
 
   # Wait for order to execute/be cancelled before buying more
@@ -34,6 +36,8 @@ orders = []
     sleep wait_time 
   end
 }
+
+bfx.summarize_orders(orders)
 
 # Messages:
 # initial order response

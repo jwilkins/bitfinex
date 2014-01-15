@@ -8,4 +8,12 @@ Gem::Specification.new do |s|
   s.email       = 'jwilkins@bitland.net'
   s.files       = ["lib/bitfinex.rb"]
   s.homepage    = 'https://rubygems.org/gems/bitfinex'
+
+  s.executables = ['timed_tx']
+  s.test_files    = %w(test/knock.rb test/test-auth.rb test/test-unauth.rb)
+  s.add_dependency             'hashie'
+  s.add_dependency             'colored'
+  s.add_dependency             'pusher-client'
+
+  s.add_development_dependency 'byebug'
 end

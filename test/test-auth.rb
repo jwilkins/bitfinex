@@ -8,7 +8,7 @@ require 'knock'
 include Knock
 
 testing "Authenticated calls" do
-  @bfx = BitFinex.new
+  @bfx = Bitfinex.new
 
   testing 'orders' do
     orders = @bfx.orders
