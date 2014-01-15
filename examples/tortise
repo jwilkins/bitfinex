@@ -1,0 +1,194 @@
+#!/usr/bin/env ruby
+CWD = File.expand_path(File.dirname(__FILE__))
+$: << File.join(CWD, '..', 'lib')
+$: << File.join(CWD)
+
+require 'bitfinex'
+require 'docopt'
+
+class Tortise
+
+  attr_accessor :bid, :ask, :last, :orders, :order_ids, :buy_order_ids, :sell_order_ids
+
+  def initialize
+    @bfx = Bitfinex.new
+    update_prices
+    @order_ids = []
+    @buy_order_ids = []
+    @sell_order_ids = []
+    @orders = {}
+  end
+
+  def update_prices
+    return true if (@last_update && (Time.now - @last_update) < 5)
+    ticker = @bfx.ticker
+    @bid = ticker['bid']
+    @mid = ticker['mid']
+    @ask = ticker['ask']
+    @last = ticker['last_price']
+    @last_update = ticker['timestamp']
+    true
+  end
+
+  def order(opts={})
+    started = Time.now
+    update_prices
+    oo = {action: :buy_bfx, amount: 0.1, delta:10}.merge(opts)
+
+    begin
+      if oo[:action].to_s =~ /buy/
+        if oo[:price]
+          price = oo[:price] - oo[:delta]
+        else
+          price = @ask - oo[:delta]
+        end
+        puts "Ask is #{ask}, delta is #{oo[:delta]}"
+        res = @bfx.send(oo[:action], oo[:amount], price)
+        @buy_order_ids << res.order_id
+      elsif oo[:action].to_s =~ /sell/
+        if oo[:price] && oo[:price] > @bid
+            price = oo[:price] + oo[:delta]
+        else
+          price = @bid + oo[:delta]
+        end
+        puts "Bid is #{ask}, delta is #{oo[:delta]}"
+        res = @bfx.send(oo[:action], oo[:amount], price)
+        @sell_order_ids << res.order_id
+      else
+        raise "invalid order type"
+      end
+    rescue => e
+      puts e
+      return nil
+    end
+
+    orderid = res.order_id
+    @order_ids << orderid
+    @orders[orderid] = res
+
+    puts "Placed #{oo[:action]} order #{orderid} (#{res['original_amount']}BTC @ "\
+      "#{"%0.02f" % res['price']}), waiting for completion .."
+
+    @orders[orderid]['status'] = :pending
+
+    wait_for(orderid)
+
+    elapsed = Time.at(Time.now - started).strftime("%H:%M:%S")
+
+    puts "#{@orders[orderid]['status']} #{oo[:action]} in #{elapsed}"
+
+    return @orders[orderid]['executed_amount']
+  end
+
+  def set_status(orderid)
+    oo = @orders[orderid]
+    if oo['executed_amount'] == oo['original_amount']
+      oo['status'] = :finished
+    elsif oo['executed_amount'] > 0
+      oo['status'] = :partial
+    elsif oo['is_cancelled']
+      oo['status'] = :cancelled
+    end
+  end
+
+  def show_order_status(oi)
+    #puts "  #{elapsed_str}\n#{@bfx.summarize_orders([orderid])}"
+    update_prices
+    elapsed = Time.now - oi.timestamp
+    elapsed_str = Time.at(elapsed).strftime("[%H:%M:%S]")
+    puts "  #{elapsed_str} #{oi.id}: #{oi.side} #{oi.original_amount} @ #{oi.price}"
+    puts "                          #{oi.executed_amount} executed"
+    puts "                          #{oi.remaining_amount} remaining"
+    puts "                          #{@bid} bid/ #{ask} ask"
+  end
+
+  def wait_for(orderid, sleep_interval=5, report_interval=60, timeout=1800)
+    started = Time.now
+    last_update = 0
+    oi = nil
+    begin
+      sleep(sleep_interval)
+      begin
+        oi = @bfx.status(orderid)
+        @orders[orderid] = oi
+
+        elapsed = Time.now - started
+        if elapsed - last_update  > report_interval
+          show_order_status(oi)
+          last_update = elapsed
+        end
+
+        if elapsed > timeout
+          #puts "Timeout, cancelling #{orderid}"
+          #res = @bfx.cancel(orderid)
+        end
+      rescue => e
+        puts "Error: #{e}, retrying"
+      end
+    end while(oi['is_live'])
+    set_status(orderid)
+    show_order_status(oi)
+    #@bfx.summarize_orders([orderid])
+    #@bfx.summarize_orders(@order_ids)
+  end
+
+  def run(amount, delta=5)
+    started = Time.now
+    update_prices
+
+    if order(action: :buy_bfx, amount: amount, price: @ask, delta: delta)
+      lo = @orders[@order_ids.last]
+      bought = lo.executed_amount
+      if bought > 0
+        show_order_status(lo)
+        order(action: :sell_bfx, amount: bought, price: @ask, delta: delta)
+        if @orders[@order_ids.last].status == :cancelled
+          puts "retrying"
+          order(action: :sell_bfx, amount: bought, price: @ask, delta: delta)
+          lo = @orders[@order_ids.last]
+          show_order_status(lo)
+        end
+        sold = @orders[@order_ids.last].executed_amount
+        lo = @orders[@order_ids.last]
+        show_order_status(lo)
+        elapsed = Time.at(Time.now - started).strftime("%H:%M:%S")
+        if bought > 0 && sold > 0
+          puts "finished buy & sell in #{elapsed}"
+        else
+          puts "aborted after timeout in sell"
+        end
+      else
+        puts "aborted after timeout in buy"
+      end
+    end
+
+    puts "fixing buy orders"
+    @buy_order_ids.each { |bo|
+      puts "  #{bo}: #{@orders[bo].side}"
+      @orders[bo].side = 'buy'
+      puts "  #{bo}: #{@orders[bo].side}"
+    }
+    puts @bfx.summarize_orders(@buy_order_ids)
+    puts "Orders: #{@order_ids.join(', ')}"
+    puts @bfx.summarize_orders(@order_ids)
+  end
+end
+
+
+tt = Tortise.new
+tt.run(0.1, 0.1)
+#tt.order(action: :buy_bfx, amount: 0.1, delta: 5)
+#tt.order(action: :sell_bfx, amount: 0.1, delta: 5)
+
+=begin
+10.times {
+  tt.run
+}
+
+
+  wait_time = (interval - (Time.now - started))
+  sleep(wait_time) if wait_time > 0
+}
+
+
+=end

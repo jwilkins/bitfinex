@@ -1,0 +1,77 @@
+#!/usr/bin/env ruby
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+require 'docopt'
+
+doc = <<DOCOPT
+#{__FILE__}
+
+Usage:
+  #{__FILE__} buy <bought> at <cost> sell <sold> for <amount> [on (bitfinex|bitstamp)] [options]
+  #{__FILE__} -h | --help
+  #{__FILE__} --version
+
+Example, try:
+  #{__FILE__} buy 10 at 830 sell 10 at 835
+  #{__FILE__} sell 0.1 on bitfinex -x 3
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+  -f            Use Bitfinex rates
+  -s            Use Bitstamp rates
+
+DOCOPT
+
+Signal.trap("INT") do
+  puts "\nQuitting .."
+  exit(-1)
+end
+
+begin
+  bought = 0
+  cost = 0.0
+  sold = 0
+  amount = 0.0
+  exchange = :bitfinex
+
+  opts = Docopt::docopt(doc)
+
+  if opts['buy']
+    bought = opts['<bought>'].to_f
+    cost = opts['<cost>'].to_f
+    #if opts['ea']
+  end
+
+  if opts['sell']
+    sold = opts['<sold>'].to_f
+    amount = opts['<amount>'].to_f
+  end
+
+  if opts['on']
+    routing = 'bitfinex' if opts['bitfinex'] || opts['-f']
+    routing = 'bitstamp' if opts['bitstamp'] || opts['-s']
+  end
+
+
+  total_cost = (bought * cost) * 1.0012 if exchange == :bitfinex
+  total_cost = (bought * cost) * 1.0035 if exchange == :bitstamp
+
+  total_return = (amount * sold) - ((amount * sold) * 0.0012) if exchange == :bitfinex
+  total_return = (amount * sold) - ((amount * sold) * 0.0035) if exchange == :bitstamp
+
+  profit = total_return - total_cost
+
+  puts "Total cost: #{"%0.02f" % total_cost}"
+  puts "Total return: #{"%0.02f" % total_return}"
+  puts "P/L: #{"%0.02f" % profit}"
+
+rescue Docopt::Exit => e
+  puts e.message
+  exit
+rescue => e
+  puts e.message
+  exit
+end
