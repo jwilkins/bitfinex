@@ -2,16 +2,21 @@ bitfinex
 ========
 
 Ruby library for Bitfinex.com
-Work in progress, contributions welcome but keep in mind that the official docs seem to refer to an older version of their API.  Eg, signatures are now computed with an HMAC.
+Work in progress, contributions welcome but keep in mind that the official docs seem to refer to an older version of their API.  Eg, /v1/candles is no longer functional.
 
-If you like this, send pull requests with improvements.  Or send bitcoin: 12bEpFnsvPPUS57PnuSJPZe6zHvwcyYFVb
+If you like this, send pull requests. Bitcoin works too: 12bEpFnsvPPUS57PnuSJPZe6zHvwcyYFVb
 
 CLI for Bitfinex
 ================
-./timed_tx sell 1 at 1000 on bitfinex -x 10 -i 60
+./bin/ticker
+  Bid: 839.16
+  Ask: 838.66
+
+./bin/timed_tx sell 1 on bitfinex -x 10 -i 60
   [*] timed_tx
   Will:
-    sell 1.0 BTC @ 845.0 USD 10 time(s)
+    sell 1.0 BTC @ $1500 USD
+    10 time(s)
     on bitfinex
     1 order every 60 seconds
   pausing 10 seconds, hit ctrl-c to abort

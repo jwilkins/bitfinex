@@ -5,17 +5,23 @@ $: << File.join(CWD)
 
 require 'bitfinex'
 require 'docopt'
+require 'byebug'
+
+Signal.trap("INT") do
+  puts "\nquitting.."
+  exit
+end
 
 class Tortise
 
-  attr_accessor :bid, :ask, :last, :orders, :order_ids, :buy_order_ids, :sell_order_ids
+  attr_accessor :bid, :ask, :last, :orders, :order_ids #, :buy_order_ids, :sell_order_ids
 
   def initialize
     @bfx = Bitfinex.new
     update_prices
     @order_ids = []
-    @buy_order_ids = []
-    @sell_order_ids = []
+    #@buy_order_ids = []
+    #@sell_order_ids = []
     @orders = {}
   end
 
@@ -36,24 +42,28 @@ class Tortise
     oo = {action: :buy_bfx, amount: 0.1, delta:10}.merge(opts)
 
     begin
+      # if no price specified, use current bid price
       if oo[:action].to_s =~ /buy/
         if oo[:price]
           price = oo[:price] - oo[:delta]
         else
-          price = @ask - oo[:delta]
+          price = @bid - oo[:delta]
         end
         puts "Ask is #{ask}, delta is #{oo[:delta]}"
+        puts "Bid is #{@bid}, delta is #{oo[:delta]}, bidding #{price}"
         res = @bfx.send(oo[:action], oo[:amount], price)
-        @buy_order_ids << res.order_id
+        #@buy_order_ids << res.order_id
       elsif oo[:action].to_s =~ /sell/
+        # adjust target price if bid has gone above delta
         if oo[:price] && oo[:price] > @bid
-            price = oo[:price] + oo[:delta]
+          price = oo[:price] + oo[:delta]
         else
           price = @bid + oo[:delta]
         end
-        puts "Bid is #{ask}, delta is #{oo[:delta]}"
+        puts "Ask is #{ask}, delta is #{oo[:delta]}"
+        puts "Bid is #{@bid}, delta is #{oo[:delta]}, asking #{price}"
         res = @bfx.send(oo[:action], oo[:amount], price)
-        @sell_order_ids << res.order_id
+        #@sell_order_ids << res.order_id
       else
         raise "invalid order type"
       end
@@ -77,7 +87,8 @@ class Tortise
 
     puts "#{@orders[orderid]['status']} #{oo[:action]} in #{elapsed}"
 
-    return @orders[orderid]['executed_amount']
+    #return @orders[orderid]['executed_amount']
+    orderid
   end
 
   def set_status(orderid)
@@ -96,10 +107,9 @@ class Tortise
     update_prices
     elapsed = Time.now - oi.timestamp
     elapsed_str = Time.at(elapsed).strftime("[%H:%M:%S]")
-    puts "  #{elapsed_str} #{oi.id}: #{oi.side} #{oi.original_amount} @ #{oi.price}"
-    puts "                          #{oi.executed_amount} executed"
-    puts "                          #{oi.remaining_amount} remaining"
-    puts "                          #{@bid} bid/ #{ask} ask"
+    puts "#{elapsed_str} #{oi.id}: #{oi.side} #{oi.original_amount} @ #{oi.price}"
+    puts "  (#{oi.executed_amount} done | #{oi.remaining_amount} remaining)"
+    puts "  Current prices: #{@bid} bid/ #{ask} ask"
   end
 
   def wait_for(orderid, sleep_interval=5, report_interval=60, timeout=1800)
@@ -136,38 +146,50 @@ class Tortise
     started = Time.now
     update_prices
 
-    if order(action: :buy_bfx, amount: amount, price: @ask, delta: delta)
-      lo = @orders[@order_ids.last]
-      bought = lo.executed_amount
-      if bought > 0
-        show_order_status(lo)
-        order(action: :sell_bfx, amount: bought, price: @ask, delta: delta)
-        if @orders[@order_ids.last].status == :cancelled
-          puts "retrying"
-          order(action: :sell_bfx, amount: bought, price: @ask, delta: delta)
-          lo = @orders[@order_ids.last]
-          show_order_status(lo)
-        end
-        sold = @orders[@order_ids.last].executed_amount
-        lo = @orders[@order_ids.last]
-        show_order_status(lo)
-        elapsed = Time.at(Time.now - started).strftime("%H:%M:%S")
-        if bought > 0 && sold > 0
-          puts "finished buy & sell in #{elapsed}"
-        else
-          puts "aborted after timeout in sell"
-        end
-      else
-        puts "aborted after timeout in buy"
-      end
+    buy_order_id = order(action: :buy_bfx, amount: amount, price: @ask, delta: delta)
+    unless buy_order_id
+      puts "buy_order_id is nil, giving up"
+      exit
     end
 
-    puts "fixing buy orders"
-    @buy_order_ids.each { |bo|
-      puts "  #{bo}: #{@orders[bo].side}"
-      @orders[bo].side = 'buy'
-      puts "  #{bo}: #{@orders[bo].side}"
-    }
+    bo = @orders[buy_order_id]
+    if bo.executed_amount == 0
+      puts "bought 0, giving up"
+      exit
+    end
+
+    show_order_status(bo)
+    sell_order_id = order(action: :sell_bfx, amount: bought, price: @ask, delta: delta)
+    unless sell_order_id
+      puts "sell_order_id is nil, giving up"
+      exit
+    end
+
+    so = @orders[sell_order_id]
+        #if @orders[@order_ids.last].status == :cancelled
+        #  puts "retrying"
+        #  order(action: :sell_bfx, amount: bought, price: @ask, delta: delta)
+        #  lo = @orders[@order_ids.last]
+        #  show_order_status(lo)
+        #end
+    sold = so.executed_amount
+    show_order_status(so)
+    elapsed = Time.at(Time.now - started).strftime("%H:%M:%S")
+    if bought > 0 && sold > 0
+      puts "finished buy & sell in #{elapsed}"
+    else
+      puts "bought #{bought}, sold #{sold} in #{elapsed}"
+    end
+
+#=begin
+#    # should be done by bitfinex class instead
+#    puts "fixing buy orders"
+#    @buy_order_ids.each { |bo|
+#      puts "  #{bo}: #{@orders[bo].side}"
+#      @orders[bo].side = 'buy'
+#      puts "  #{bo}: #{@orders[bo].side}"
+#    }
+#=end
     puts @bfx.summarize_orders(@buy_order_ids)
     puts "Orders: #{@order_ids.join(', ')}"
     puts @bfx.summarize_orders(@order_ids)
@@ -176,7 +198,7 @@ end
 
 
 tt = Tortise.new
-tt.run(0.1, 0.1)
+tt.run(0.1, 0.01)
 #tt.order(action: :buy_bfx, amount: 0.1, delta: 5)
 #tt.order(action: :sell_bfx, amount: 0.1, delta: 5)
 

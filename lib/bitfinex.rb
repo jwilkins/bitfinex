@@ -48,7 +48,7 @@ class Bitfinex
     end
     @exchanges = ["BFX", "BSTP", "all"] # all = no routing
     @ticker_info = nil
-    @orders = {}
+    #@orders = {}
     @buy_orders = {}
     @sell_orders = {}
   end
@@ -167,8 +167,9 @@ class Bitfinex
     return nil unless have_key?
     #return @orders[order_id] if @orders[order_id] && (Time.now - @orders[order_id].timestamp < 10)
     url = "/v1/order/status"
+    oid = order_id.to_i
     options = {
-      "order_id" => order_id.to_i
+      "order_id" => oid
     }
     response = self.class.post(url, :headers => headers_for(url, options)).parsed_response
     %w(price avg_execution_price timestamp
@@ -179,16 +180,21 @@ class Bitfinex
     om = Hashie::Mash.new(response)
 
     # fix bitfinex bug with buy orders changing to sell after execution
-    if @buy_orders[om.order_id]
+    # reset orders to initial side seen
+    if @buy_orders[oid]
       om.side = 'buy'
-    elsif @sell_orders[om.order_id]
+    elsif @sell_orders[oid]
       om.side = 'sell'
-    elsif om.side = 'buy'
-      @buy_orders[om.order_id] = om
-    elsif om.side = 'sell'
-      @sell_orders[om.order_id] = om
+    else
+      # haven't seen this order before
+      if om.side = 'buy'
+        @buy_orders[oid] = om
+      elsif om.side = 'sell'
+        @sell_orders[oid] = om
+      else
+        raise "order #{oid} has side #{om.side} not buy or sell"
+      end
     end
-
     om
   end
 
@@ -247,6 +253,8 @@ class Bitfinex
     url = "/v1/order/new"
 
     oh = {type:'limit', sym:'btcusd', routing:'all', side:'buy'}.merge(opts)
+puts "order(): oh:#{oh}"
+    #byebug
     # using negative amounts as shorthand for a sell
     if amount < 0
       puts "order(): negative amount: #{amount}"
@@ -283,16 +291,20 @@ class Bitfinex
       raise "Error submitting order: #{e}"
     end
     om = Hashie::Mash.new(res.parsed_response)
-    unless @buy_orders[om.order_id] || @sell_orders[om.order_id]
+    if @buy_orders[om.order_id] || @sell_orders[om.order_id]
+      raise "order id already present: #{om.order_id}"
+      byebug
+      puts
+    else
       if om.side == 'sell'
         @sell_orders[om.order_id] = om
       elsif om.side == 'buy'
         @buy_orders[om.order_id] = om
       else
         raise "invalid side: #{om.side}"
+        byebug
+        puts
       end
-    else
-      raise "order id already present: #{om.order_id}"
     end
   end
 
@@ -347,8 +359,9 @@ class Bitfinex
 
       os << "  Total #{flts(btc_buy)} bought for ~$#{buxs(price_buy)}"  if btc_buy > 0
       os << "  Total #{flts(btc_sell)}  sold for ~$#{buxs(price_sell)}" if btc_sell > 0
-      os << "  Pending: #{pending_buy} buy @ #{buxs(price_buy)} avg" #if pending_buy > 0
-      os << "           #{pending_sell} sell @ #{buxs(price_sell)} avg" #if pending_sell > 0
+      #os << "  Pending: #{pending_buy} buy @ #{buxs(price_buy)} avg" #if pending_buy > 0
+      os << "  Pending: #{pending_buy} buy / #{pending_sell} sell "
+      #os << "           #{pending_sell} sell @ #{buxs(price_sell)} avg" #if pending_sell > 0
       os << "  Current: #{ticker.bid} bid #{ticker.ask} ask"
       os << "  Total fees: #{"%06.02f" % fees}" if fees > 0
       if btc_buy > 0 && btc_sell > 0
@@ -388,8 +401,17 @@ class Bitfinex
     nil
   end
 
-  def orderbook(sym='btcusd')
-    Hashie::Mash.new(self.class.get("/v1/book/#{sym}").parsed_response)
+  #
+  def orderbook(opts={})
+    oo = {sym:'btcusd', limit_bids:50, limit_asks:50}.merge(opts)
+    # {"bids" => [bid, bid, ...], "ask": [ ask, ask, ...]}
+    options = {
+      "limit_bids" => oo[:limit_bids],
+      "limit_asks" => oo[:limit_asks]
+    }
+    url = "/v1/book/#{oo[:sym]}"
+    Hashie::Mash.new(
+      (self.class.get(url, :headers => headers_for(url, options)).parsed_response))
   end
 
   def lendbook(sym='btc')
@@ -397,9 +419,28 @@ class Bitfinex
     self.class.get("/v1/lendbook/#{sym}").parsed_response
   end
 
-  def trades(sym='btcusd')
-    #Hashie::Mash.new(
-    self.class.get("/v1/trades/#{sym}").parsed_response
+  def trades(opts={})
+    to = {sym:'btcusd', limit:50, timestamp:0}.merge(opts)
+      options = {
+        "limit" => to[:limit].to_i,
+        "timestamp" => to[:timestamp].to_s
+      }
+    # XXX: save to local storage
+    begin
+      tr = []
+       url = "/v1/trades/#{to[:sym]}"
+      (self.class.get(url, :headers => headers_for(url, options)).parsed_response).each { |th|
+        tm = Hashie::Mash.new(th)
+        tm.price = tm.price.to_f
+        tm.timestamp = tm.timestamp
+        tm.amount = tm.amount.to_f
+        tm.time = Time.at(tm.timestamp.to_f).strftime("%H:%M:%S")
+        tr << tm
+      }
+      return tr.reverse
+    rescue => e
+      puts "Bitfinex.trades error:#{e}"
+    end
   end
 
   def lends(sym='btc')

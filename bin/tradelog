@@ -1,0 +1,62 @@
+#!/usr/bin/env ruby
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+require 'docopt'
+require 'colored'
+require 'byebug'
+
+=begin
+doc = <<DOCOPT
+#{__FILE__}
+
+Usage:
+  #{__FILE__}  last <last>
+  #{__FILE__}  since <since>
+  #{__FILE__} -h | --help
+  #{__FILE__} --version
+
+Example, try:
+  #{__FILE__} since 1h
+  #{__FILE__} last 10 buy
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+
+DOCOPT
+=end
+
+Signal.trap("INT") do
+  puts "\nQuitting .."
+  exit(-1)
+end
+
+bfx = Bitfinex.new
+latest = nil
+
+trades = bfx.trades
+begin
+  trades.each { |tt|
+    msg = "#{tt.timestamp}:[#{tt.time}] #{"%8.03f" % tt.amount} @ #{"%6.02f" % tt.price} on #{tt.exchange}"
+    case tt.amount
+    when 0..1
+      puts msg
+    when 1..5
+      puts msg.green
+    when 5..10
+      puts msg.blue
+    when 10..20
+      puts msg.cyan
+    else
+      puts msg.magenta
+    end
+  }
+  latest = trades.last.timestamp if trades && trades.last
+  sleep 5
+  trades = bfx.trades(timestamp: latest + 1)
+end while(true)
+# [{"price"=>"839.06", "amount"=>"0.1135261", "timestamp"=>1389819265, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0401839", "timestamp"=>1389819252, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0126806", "timestamp"=>1389819239, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0226037", "timestamp"=>1389819233, "exchange"=>"bitstamp"}, .... ]
+
+

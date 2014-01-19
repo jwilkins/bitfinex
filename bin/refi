@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+require 'docopt'
+
+doc = <<DOCOPT
+#{__FILE__}
+
+Usage:
+  #{__FILE__}  last <last>
+  #{__FILE__}  since <since>
+  #{__FILE__} -h | --help
+  #{__FILE__} --version
+
+Example, try:
+  #{__FILE__} since 1h
+  #{__FILE__} last 10 buy
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+
+DOCOPT
+
+Signal.trap("INT") do
+  puts "\nQuitting .."
+  exit(-1)
+end
+
+bfx = Bitfinex.new
+
+#lends = bfx.lends
+#puts lends
+#byebug
+
+
+lendbook = bfx.lendbook
+bids = lendbook["bids"]
+asks = lendbook["asks"]
+byebug
+bids.sort! { |aa, bb| aa['rate'].to_f <=> bb["rate"].to_f }
+asks.sort! { |aa, bb| aa['rate'].to_f <=> bb["rate"].to_f }
+
+asks.each { |aa| puts aa['rate'] }
+
+#tt = bf.trades
+# [{"price"=>"839.06", "amount"=>"0.1135261", "timestamp"=>1389819265, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0401839", "timestamp"=>1389819252, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0126806", "timestamp"=>1389819239, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0226037", "timestamp"=>1389819233, "exchange"=>"bitstamp"}, .... ]
+
+#ob = bf.orderbook
+
+#{"bids"=>[{"price"=>"839.27", "amount"=>"38.47241019", "timestamp"=>"1389817970.0"}, {"price"=>"836.5", "amount"=>"0.1", "timestamp"=>"1389818854.0"}, {"price"=>"836.2", "amount"=>"0.03", "timestamp"=>"1389818742.0"}, {"price"=>"836.1951", "amount"=>"5.0", "timestamp"=>"1389819216.0"}, {"price"=>"836.19", "amount"=>"11.42", "timestamp"=>"1389818529.0"}, {"price"=>"835.0", "amount"=>"1.65", "timestamp"=>"1389818726.0"}, ..}.
+#"asks"=>[{"price"=>"839.0", "amount"=>"0.1", "timestamp"=>"1389819276.0"}, {"price"=>"839.0", "amount"=>"2.0", "timestamp"=>"1389819270.0"}, {"price"=>"839.26", "amount"=>"0.6", "timestamp"=>"1389819286.0"}, {"price"=>"839.265", "amount"=>"17.65199769", "timestamp"=>"1389818957.0"}, {"price"=>"839.89", "amount"=>"1.0", "timestamp"=>"1389818687.0"}, {"price"=>"839.99", "amount"=>"1.0", "timestamp"=>"1389818669.0"},

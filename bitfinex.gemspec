@@ -14,6 +14,7 @@ Gem::Specification.new do |s|
   s.add_dependency             'hashie'
   s.add_dependency             'colored'
   s.add_dependency             'pusher-client'
+  s.add_dependency             'chronic'
 
   s.add_development_dependency 'byebug'
 end

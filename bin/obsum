@@ -1,0 +1,142 @@
+#!/usr/bin/env ruby
+CWD = File.expand_path(File.dirname(__FILE__))
+$: << File.join(CWD, '..', 'lib')
+$: << File.join(CWD)
+
+require 'mechanize'
+require 'colored'
+require 'bitfinex'
+require 'byebug'
+
+def money(val)
+  int =  val.to_s.gsub(/\.\d+/, '').to_i.to_s
+  str = "#{"%-0.02f" % val.to_f}"
+  if str =~ /([-$+]?)(\d+)(\.\d+)?/
+    decimal = $3 || ".00"
+    while int.sub!(/(\d+)(\d\d\d)/,'\1,\2'); end
+    return "$#{"% 15s" % int}#{decimal}"
+  end
+  return val
+end
+
+class OrderSum
+  attr_accessor :order_count, :sum_amount, :sum_cost
+  def initialize(opts={})
+    @order_count = 0
+    @sum_amount = 0
+    @sum_cost = 0
+
+    @min = nil
+    @max = nil
+    @platform = nil
+
+    if opts[:window]
+      bfx = Bitfinex.new
+      ticker = bfx.ticker
+      @min = ticker.mid - opts[:window]
+      @max = ticker.mid + opts[:window]
+    end
+
+    if opts[:platform]
+      @platform = opts[:platform]
+    end
+  end
+
+  def add(platform, count, price, amount)
+    return if @platform && platform != @platform
+    return if @min && price < @min
+    return if @max && price > @max
+    @order_count += count
+    @sum_amount += amount
+    @sum_cost += price * amount
+  end
+end
+
+def report(bids, asks)
+  puts "#{money(bids.sum_cost)} in #{bids.order_count} bids for #{bids.sum_amount} total btc"
+  puts "#{money(asks.sum_cost)} in #{asks.order_count} asks for #{asks.sum_amount} total btc"
+
+  sum = bids.sum_cost - asks.sum_cost
+  msg = "total $ bid - total $ asked = #{money(sum)}"
+  if sum > 0
+    puts msg.green
+  else
+    puts msg.red
+  end
+  puts "-" * 40
+end
+
+mech = Mechanize.new
+page = mech.get('https://www.bitfinex.com/pages/ll_order_book')
+time = Time.now
+
+bids = OrderSum.new
+asks = OrderSum.new
+
+bfx_bids = OrderSum.new(platform:'BFX')
+bfx_asks= OrderSum.new(platform:'BFX')
+
+bstp_bids = OrderSum.new(platform:'BSTP')
+bstp_asks = OrderSum.new(platform:'BSTP')
+
+bid_window = OrderSum.new(window:50)
+ask_window =  OrderSum.new(window:50)
+
+
+open("orderbook-#{time.strftime("%Y%m%d-%H%M%S")}.csv", 'w+') { |obf|
+  bids_noko = (page/"div.sell")
+  (bids_noko/"tr").each { |tr|
+    begin
+      platform = (tr/"td")[0].inner_text
+      num_orders = (tr/"td")[1].inner_text.to_i
+      price = (tr/"td")[2].inner_text[1..-1].to_f
+      amount = (tr/"td")[3].inner_text.to_f
+      cum = (tr/"td")[4].inner_text.to_f
+
+      cost = price * amount
+
+      bids.add(platform, num_orders, price, amount)
+      bfx_bids.add(platform, num_orders, price, amount)
+      bstp_bids.add(platform, num_orders, price, amount)
+      bid_window.add(platform, num_orders, price, amount)
+      obf << "bid,#{platform},#{num_orders},#{price},#{amount},#{cost}\n"
+    rescue => e
+      puts "#{e}: #{tr.inner_text.sub("\n", ',')}" if ENV['DEBUG']
+    end
+  }
+
+  asks_noko = (page/"div.buy")
+  (asks_noko/"tr").each { |tr|
+    begin
+      platform = (tr/"td")[4].inner_text
+      num_orders = (tr/"td")[3].inner_text.to_i
+      price = (tr/"td")[2].inner_text[1..-1].to_f
+      amount = (tr/"td")[1].inner_text.to_f
+      cum = (tr/"td")[0].inner_text.to_f
+
+      cost = price * amount
+
+      asks.add(platform, num_orders, price, amount)
+      bfx_asks.add(platform, num_orders, price, amount)
+      bstp_asks.add(platform, num_orders, price, amount)
+      ask_window.add(platform, num_orders, price, amount)
+      obf << "ask,#{platform},#{num_orders},#{price},#{amount},#{cost}\n"
+    rescue => e
+      puts "#{e}: #{tr.inner_text.sub("\n", ',')}" if ENV['DEBUG']
+    end
+  }
+}
+
+puts "Total bids-asks Bitfinex"
+report(bfx_bids, bfx_asks)
+
+puts "Total bids-asks Bitstamp"
+report(bstp_bids, bstp_asks)
+
+puts "Total bids-asks"
+report(bids, asks)
+
+puts "Total bids-asks $50± of ticker price"
+report(bid_window, ask_window)
+
+
