@@ -5,24 +5,41 @@ $: << File.join(File.dirname(__FILE__))
 require 'bitfinex'
 require 'docopt'
 
+=begin
+  #{__FILE__} dryrun [options]                   Simulate refinance
+  #{__FILE__} execute [options]                  Refinance
+
+Example, try:
+  #{__FILE__} dryrun -p 14 -r 0.30
+  #{__FILE__} execute -p 14 -r 0.30
+
+Options:
+  -h --help                     Show this screen.
+  --version                     Show version.
+
+  -p <days>                     Minumum period
+  -r <rate>                     Maximum interest rate (per day)
+=end
+
 doc = <<DOCOPT
 #{__FILE__}
 
 Usage:
-  #{__FILE__}  last <last>
-  #{__FILE__}  since <since>
-  #{__FILE__} -h | --help
-  #{__FILE__} --version
+  #{File.basename(__FILE__)}                Display current loan information
 
-Example, try:
-  #{__FILE__} since 1h
-  #{__FILE__} last 10 buy
-
-Options:
-  -h --help     Show this screen.
-  --version     Show version.
 
 DOCOPT
+
+begin
+  opts = Docopt::docopt(doc)
+
+#  period = opts['<days>'] if opts['-p'] 
+#  rate = opts['<rate>'] if opts['-r'] 
+
+rescue Docopt::Exit => e
+  puts e.message
+  exit
+end
 
 Signal.trap("INT") do
   puts "\nQuitting .."
@@ -35,15 +52,23 @@ bfx = Bitfinex.new
 #puts lends
 #byebug
 
+# check current loans
+# build list of loans exceeding max rate & get total
+# make offers 
+# close offers exceeding rate
 
-lendbook = bfx.lendbook
+#lendbook = bfx.lendbook(limit_bids:1000, limit_asks:1000)
+lendbook = bfx.lendbook(limit_bids:3, limit_asks:3)
+
 bids = lendbook["bids"]
 asks = lendbook["asks"]
+
 byebug
-bids.sort! { |aa, bb| aa['rate'].to_f <=> bb["rate"].to_f }
+bids.sort! { |aa, bb| aa['rate'].to_f <=> bb["rate"].to_f }.reverse!
 asks.sort! { |aa, bb| aa['rate'].to_f <=> bb["rate"].to_f }
 
 asks.each { |aa| puts aa['rate'] }
+bids.each { |bb| puts bb['rate'] }
 
 #tt = bf.trades
 # [{"price"=>"839.06", "amount"=>"0.1135261", "timestamp"=>1389819265, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0401839", "timestamp"=>1389819252, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0126806", "timestamp"=>1389819239, "exchange"=>"bitstamp"}, {"price"=>"839.06", "amount"=>"0.0226037", "timestamp"=>1389819233, "exchange"=>"bitstamp"}, .... ]

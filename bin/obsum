@@ -7,6 +7,9 @@ require 'mechanize'
 require 'colored'
 require 'bitfinex'
 require 'byebug'
+require 'stud/try'
+
+$save_orderbook_data=true
 
 def money(val)
   int =  val.to_s.gsub(/\.\d+/, '').to_i.to_s
@@ -14,13 +17,13 @@ def money(val)
   if str =~ /([-$+]?)(\d+)(\.\d+)?/
     decimal = $3 || ".00"
     while int.sub!(/(\d+)(\d\d\d)/,'\1,\2'); end
-    return "$#{"% 15s" % int}#{decimal}"
+    return "$#{"% 10s" % int}#{decimal}"
   end
   return val
 end
 
 class OrderSum
-  attr_accessor :order_count, :sum_amount, :sum_cost
+  attr_accessor :order_count, :sum_amount, :sum_cost, :min, :mid, :max
   def initialize(opts={})
     @order_count = 0
     @sum_amount = 0
@@ -28,13 +31,15 @@ class OrderSum
 
     @min = nil
     @max = nil
+    @mid = nil
     @platform = nil
 
     if opts[:window]
       bfx = Bitfinex.new
       ticker = bfx.ticker
-      @min = ticker.mid - opts[:window]
-      @max = ticker.mid + opts[:window]
+      @mid = ticker.mid
+      @min = @mid - opts[:window]
+      @max = @mid + opts[:window]
     end
 
     if opts[:platform]
@@ -43,100 +48,247 @@ class OrderSum
   end
 
   def add(platform, count, price, amount)
+    #puts "add #{@min} < #{price} > #{@max}?"
     return if @platform && platform != @platform
     return if @min && price < @min
     return if @max && price > @max
+
     @order_count += count
     @sum_amount += amount
     @sum_cost += price * amount
   end
 end
 
-def report(bids, asks)
-  puts "#{money(bids.sum_cost)} in #{bids.order_count} bids for #{bids.sum_amount} total btc"
-  puts "#{money(asks.sum_cost)} in #{asks.order_count} asks for #{asks.sum_amount} total btc"
-
-  sum = bids.sum_cost - asks.sum_cost
-  msg = "total $ bid - total $ asked = #{money(sum)}"
-  if sum > 0
-    puts msg.green
-  else
-    puts msg.red
+class OrderBook
+  attr_accessor :bids, :asks, :nickname
+  def initialize(opts={})
+    @bids = OrderSum.new(opts)
+    @asks = OrderSum.new(opts)
+    opts[:verbose] ? @verbose = true : @verbose = false
+    opts[:nickname] ? @nickname = opts[:nickname]: @nickname = ''
   end
-  puts "-" * 40
+
+  def sum
+    @bids.sum_cost - @asks.sum_cost
+  end
+
+  def report(verbose=false)
+    sum > 0 ?  color = :green : color = :red
+    if @verbose
+      msg = "bids: #{money(@bids.sum_cost)} - "\
+            "asks: #{money(@asks.sum_cost)} "\
+            "= #{money(sum)}"
+      msg = msg.send(color) + "\n"
+    else
+      msg = "#{money(sum)}"
+      msg = msg.send(color) + " "
+    end
+    msg
+  end
+end
+
+def fnord_curl(value, gauge)
+    `curl -s -X POST -d '{ "_type": "_set", "value": #{value}, "gauge": #{gauge} }' http://127.0.0.1:4242/events`
 end
 
 mech = Mechanize.new
-page = mech.get('https://www.bitfinex.com/pages/ll_order_book')
-time = Time.now
+bfx = Bitfinex.new
 
-bids = OrderSum.new
-asks = OrderSum.new
+verbose = false
+verbose = true if ARGV.include?('-v')
+last_ticker = nil
+last_spread = nil
+#last_order_sums = {all:0, lwin:0, swin:0}
+last_order_sums = {}
 
-bfx_bids = OrderSum.new(platform:'BFX')
-bfx_asks= OrderSum.new(platform:'BFX')
+begin
+  time = Time.now
+  STDOUT << time.strftime("%H:%M:%S ")
 
-bstp_bids = OrderSum.new(platform:'BSTP')
-bstp_asks = OrderSum.new(platform:'BSTP')
-
-bid_window = OrderSum.new(window:50)
-ask_window =  OrderSum.new(window:50)
-
-
-open("orderbook-#{time.strftime("%Y%m%d-%H%M%S")}.csv", 'w+') { |obf|
-  bids_noko = (page/"div.sell")
-  (bids_noko/"tr").each { |tr|
-    begin
-      platform = (tr/"td")[0].inner_text
-      num_orders = (tr/"td")[1].inner_text.to_i
-      price = (tr/"td")[2].inner_text[1..-1].to_f
-      amount = (tr/"td")[3].inner_text.to_f
-      cum = (tr/"td")[4].inner_text.to_f
-
-      cost = price * amount
-
-      bids.add(platform, num_orders, price, amount)
-      bfx_bids.add(platform, num_orders, price, amount)
-      bstp_bids.add(platform, num_orders, price, amount)
-      bid_window.add(platform, num_orders, price, amount)
-      obf << "bid,#{platform},#{num_orders},#{price},#{amount},#{cost}\n"
-    rescue => e
-      puts "#{e}: #{tr.inner_text.sub("\n", ',')}" if ENV['DEBUG']
-    end
+  page = nil
+  Stud::Try.new.try(5.times) {
+    page = mech.get('https://www.bitfinex.com/pages/order_book')
   }
 
-  asks_noko = (page/"div.buy")
-  (asks_noko/"tr").each { |tr|
-    begin
-      platform = (tr/"td")[4].inner_text
-      num_orders = (tr/"td")[3].inner_text.to_i
-      price = (tr/"td")[2].inner_text[1..-1].to_f
-      amount = (tr/"td")[1].inner_text.to_f
-      cum = (tr/"td")[0].inner_text.to_f
+  unless page && page.code == "200"
+    puts "couldn't fetch order book info, will retry in 10 seconds"
+    sleep 10
+    next
+  end
 
-      cost = price * amount
+  begin
+    books = [
+      OrderBook.new(nickname:'all'),
+      OrderBook.new(window:7, nickname:'±$7'),
+      OrderBook.new(window:3, nickname:'±$3')
+    ]
 
-      asks.add(platform, num_orders, price, amount)
-      bfx_asks.add(platform, num_orders, price, amount)
-      bstp_asks.add(platform, num_orders, price, amount)
-      ask_window.add(platform, num_orders, price, amount)
-      obf << "ask,#{platform},#{num_orders},#{price},#{amount},#{cost}\n"
-    rescue => e
-      puts "#{e}: #{tr.inner_text.sub("\n", ',')}" if ENV['DEBUG']
-    end
+=begin
+  bids = OrderSum.new
+  asks = OrderSum.new
+
+  bid_window = OrderSum.new(window:7)
+  ask_window = OrderSum.new(window:7)
+
+  sm_bid_win = OrderSum.new(window:3)
+  sm_ask_win = OrderSum.new(window:3)
+=end
+
+
+
+  open("data/orderbook-#{time.strftime("%Y%m%d-%H%M%S")}.csv", 'w+') { |obf|
+    bids_noko = (page/"div.sell")
+    (bids_noko/"tr").each { |tr|
+      begin
+        platform = (tr/"td")[0].inner_text
+        num_orders = (tr/"td")[1].inner_text.to_i
+        price = (tr/"td")[2].inner_text[1..-1].to_f
+        amount = (tr/"td")[3].inner_text.to_f
+        cum = (tr/"td")[4].inner_text.to_f
+
+        cost = price * amount
+
+=begin
+        bids.add(platform, num_orders, price, amount)
+        #     bfx_bids.add(platform, num_orders, price, amount)
+        #     bstp_bids.add(platform, num_orders, price, amount)
+        bid_window.add(platform, num_orders, price, amount)
+        sm_bid_win.add(platform, num_orders, price, amount)
+=end
+        books.each { |bb|
+          bb.bids.add(platform, num_orders, price, amount)
+        }
+
+        obf << "bid,#{platform},#{num_orders},#{price},#{amount},#{cost}\n"
+      rescue => e
+        puts "#{e}: #{tr.inner_text.sub("\n", ',')}" if ENV['DEBUG']
+      end
+    }
+
+    asks_noko = (page/"div.buy")
+    (asks_noko/"tr").each { |tr|
+      begin
+        platform = (tr/"td")[4].inner_text
+        num_orders = (tr/"td")[3].inner_text.to_i
+        price = (tr/"td")[2].inner_text[1..-1].to_f
+        amount = (tr/"td")[1].inner_text.to_f
+        cum = (tr/"td")[0].inner_text.to_f
+
+        cost = price * amount
+
+   #     asks.add(platform, num_orders, price, amount)
+   #     ask_window.add(platform, num_orders, price, amount)
+   #     sm_ask_win.add(platform, num_orders, price, amount)
+        books.each { |bb|
+          bb.asks.add(platform, num_orders, price, amount)
+        }
+
+
+        obf << "ask,#{platform},#{num_orders},#{price},#{amount},#{cost}\n"
+      rescue => e
+        puts "#{e}: #{tr.inner_text.sub("\n", ',')}" if ENV['DEBUG']
+      end
+    }
   }
-}
 
-puts "Total bids-asks Bitfinex"
-report(bfx_bids, bfx_asks)
+  ticker = bfx.ticker
+  ticker_bid = ("% 4.02f" % ticker.bid)
+  ticker_ask = ("% 4.02f" % ticker.ask)
 
-puts "Total bids-asks Bitstamp"
-report(bstp_bids, bstp_asks)
+  if last_ticker
+    if last_ticker.bid <= ticker.bid
+      ticker_bid = ticker_bid.green 
+    else
+      ticker_bid = ticker_bid.red
+    end
+    if last_ticker.ask <= ticker.ask
+      ticker_ask = ticker_ask.green 
+    else
+      ticker_ask = ticker_ask.red
+    end
+  end
+  last_ticker = ticker
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{ticker.bid.to_i}, "gauge": "bid" }' http://127.0.0.1:4242/events`
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{ticker.ask.to_i}, "gauge": "ask" }' http://127.0.0.1:4242/events`
 
-puts "Total bids-asks"
-report(bids, asks)
+  spread = ticker.ask - ticker.bid
+  if verbose
+    puts "Bid: #{ticker.bid} Ask: #{ticker.ask} Spread: #{"%0.02f" % spread} (#{"%0.02f" % ((spread/ticker.mid) * 100)}%)"
+  else
+    STDOUT << "B:#{ticker_bid}/A:#{ticker_ask}/S:#{"%0.02f" % spread} "
+  end
+  last_spread = spread
 
-puts "Total bids-asks $50± of ticker price"
-report(bid_window, ask_window)
+  books.each { |bb|
+    STDOUT << "%20s" % bb.nickname if verbose
+    STDOUT << "#{bb.nickname} " unless verbose
+    STDOUT << bb.report
+    sum = bb.sum
+    if last_order_sums[bb.nickname]
+      if sum > last_order_sums[bb.nickname]
+        STDOUT << "⇑ ".to_s.green
+      elsif sum == last_order_sums[bb.nickname]
+        STDOUT << "⇔ ".to_s.white
+      else
+        STDOUT << "⇓ ".to_s.red
+      end
+    end
+    last_order_sums[bb.nickname] = sum
+    fnord_curl(sum, "market")
+    fnord_curl(sum, "market_sum")
+    fnord_curl(sum, "market_#{bb.nickname}")
+  }
 
 
+=begin
+  STDOUT << "all         " if verbose
+  STDOUT << "all " unless verbose
+  sum = report(bids, asks, verbose).to_i
+  if sum > last_order_sums[:all]
+    STDOUT << "⇑ ".to_s.green
+  elsif sum == last_order_sums[:all]
+    STDOUT << "⇔ ".to_s.white
+  else
+    STDOUT << "⇓ ".to_s.red
+  end
+  last_order_sums[:all] = sum
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{sum}, "gauge": "market" }' http://127.0.0.1:4242/events`
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{sum}, "gauge": "market_sum" }' http://127.0.0.1:4242/events`
+
+  STDOUT << "price " if verbose
+  STDOUT << "±$7  "
+  sum = report(bid_window, ask_window, verbose).to_i
+  if sum > last_order_sums[:lwin]
+    STDOUT << "⇑ ".to_s.green
+  elsif sum == last_order_sums[:lwin]
+    STDOUT << "⇔ ".to_s.white
+  else
+    STDOUT << "⇓ ".to_s.red
+  end
+  last_order_sums[:lwin] = sum
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{sum}, "gauge": "market100" }' http://127.0.0.1:4242/events`
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{sum}, "gauge": "market100_sum" }' http://127.0.0.1:4242/events`
+
+  STDOUT << "price " if verbose
+  STDOUT << "±$3  "
+  sum = report(sm_bid_win, sm_ask_win, verbose).to_i
+  if sum > last_order_sums[:swin]
+    STDOUT << "⇑ ".to_s.green
+  elsif sum == last_order_sums[:swin]
+    STDOUT << "⇔ ".to_s.white
+  else
+    STDOUT << "⇓ ".to_s.red
+  end
+  last_order_sums[:swin] = sum
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{sum}, "gauge": "market20" }' http://127.0.0.1:4242/events`
+  `curl -s -X POST -d '{ "_type": "_set", "value": #{sum}, "gauge": "market20_sum" }' http://127.0.0.1:4242/events`
+=end
+
+  rescue => e
+    puts "Error: will retry in 30s (#{e})"
+  end
+  
+  sleep 30
+  puts unless verbose
+  puts "=" * 60 if verbose
+end while true

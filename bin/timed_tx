@@ -72,10 +72,14 @@ rescue Docopt::Exit => e
   exit
 end
 
+bfx = Bitfinex.new
+ticker = bfx.ticker
+
 puts "[*] timed_tx"
 puts "Will:"
 puts "  #{action} #{amount} BTC "
 puts "  @ $#{"%0.02f" % price} USD " if price
+puts "  current bid: #{ticker.bid}, ask: #{ticker.ask}"
 puts "  #{count} time(s)" if count > 1
 puts "  on #{routing} " if routing != 'all'
 puts "  1 order every #{interval} seconds" if count > 1
@@ -83,7 +87,6 @@ puts "pausing 10 seconds, hit ctrl-c to abort"
 sleep 10
 
 
-bfx = Bitfinex.new
 
 orders = []
 

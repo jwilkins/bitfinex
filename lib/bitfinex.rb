@@ -34,6 +34,7 @@ class Bitfinex
   format :json
 
   def initialize(key=nil, secret=nil)
+    @debug = true if ENV['DEBUG']
     @key = key
     @secret = secret
     unless have_key?
@@ -253,11 +254,11 @@ class Bitfinex
     url = "/v1/order/new"
 
     oh = {type:'limit', sym:'btcusd', routing:'all', side:'buy'}.merge(opts)
-puts "order(): oh:#{oh}"
+    puts "order(): oh:#{oh}" if @debug
     #byebug
     # using negative amounts as shorthand for a sell
     if amount < 0
-      puts "order(): negative amount: #{amount}"
+      puts "order(): negative amount: #{amount}" if @debug
       amount = amount.abs.to_s
       #oh[:side] = 'sell'
     end
@@ -310,7 +311,7 @@ puts "order(): oh:#{oh}"
 
   def summarize_orders(orderids=[])
     #begin
-      puts "summary for #{orderids.length} order(s)\n(#{orderids.join(', ')})"# if @debug
+      puts "summary for #{orderids.length} order(s)\n(#{orderids.join(', ')})" if @debug
       btc_buy = 0.0
       price_buy = 0.0
       price_buy_avg = 0.0
@@ -321,12 +322,11 @@ puts "order(): oh:#{oh}"
       fee = 0.0
       pending_buy = 0.0
       pending_sell = 0.0
+      summary_side = '+'
 
       os = []
       orderids.each { |oo|
-        os << "Order #{oo}:"
         # XXX: check symbol and currency pair
-
         # XXX: memoize
         #if @orders[oo] && Time.now - @orders[oo].timestamp < 10
         #  oi = @orders[oo]
@@ -338,13 +338,11 @@ puts "order(): oh:#{oh}"
         fee = cost * 0.0015 if oi.exchange == 'bitfinex'
         fees += fee
 
-        os << "    cost: #{buxs(cost)}"
-        os << "    fee:  #{buxs(fees)}"
-
         if oi.side == 'buy'
           pending_buy += oi.remaining_amount
           btc_buy += oi.executed_amount
           price_buy += cost
+          summary_side = '-'
         elsif oi.side == 'sell'
           pending_sell += oi.remaining_amount
           btc_sell += oi.executed_amount
@@ -353,12 +351,13 @@ puts "order(): oh:#{oh}"
           puts "invalid oi.side: #{oi.side}"
           byebug
         end
+        os << "Order #{oo} #{summary_side}#{buxs(cost)} (fee: #{buxs(fees)})"
       }
       price_buy_avg = price_buy/btc_buy
       price_sell_avg = price_sell/btc_sell
 
-      os << "  Total #{flts(btc_buy)} bought for ~$#{buxs(price_buy)}"  if btc_buy > 0
-      os << "  Total #{flts(btc_sell)}  sold for ~$#{buxs(price_sell)}" if btc_sell > 0
+      os << "  Total #{flts(btc_buy)} bought for ~$#{buxs(price_buy)} (#{buxs(price_buy/btc_buy)}/BTC)"  if btc_buy > 0
+      os << "  Total #{flts(btc_sell)}  sold for ~$#{buxs(price_sell)} (#{buxs(price_sell/btc_sell)}/BTC)" if btc_sell > 0
       #os << "  Pending: #{pending_buy} buy @ #{buxs(price_buy)} avg" #if pending_buy > 0
       os << "  Pending: #{pending_buy} buy / #{pending_sell} sell "
       #os << "           #{pending_sell} sell @ #{buxs(price_sell)} avg" #if pending_sell > 0
@@ -380,12 +379,14 @@ puts "order(): oh:#{oh}"
   # --------------- unauthenticated -----------------
   def ticker(sym='btcusd', options={})
     return @ticker_info if @ticker_info && Time.now - @ticker_info.timestamp < 60
-    tick = Hashie::Mash.new(self.class.get("/v1/ticker/#{sym}", options).parsed_response)
-    tick.keys.each { |kk|
-      tick[kk] = tick[kk].to_f
-    }
-    tick['timestamp'] = Time.at(tick['timestamp'])
-    @ticker_info = tick
+    #with_retries(:max_tries => 3) {
+      tick = Hashie::Mash.new(self.class.get("/v1/ticker/#{sym}", options).parsed_response)
+      tick.keys.each { |kk|
+        tick[kk] = tick[kk].to_f
+      }
+      tick['timestamp'] = Time.at(tick['timestamp'])
+      @ticker_info = tick
+    #}
   end
 
   # documented, but not available
@@ -414,9 +415,11 @@ puts "order(): oh:#{oh}"
       (self.class.get(url, :headers => headers_for(url, options)).parsed_response))
   end
 
-  def lendbook(sym='btc')
-    #Hashie::Mash.new(
-    self.class.get("/v1/lendbook/#{sym}").parsed_response
+  def lendbook(sym='btc', opts={})
+    url="/v1/lendbook/#{sym}"
+    options={limit_bids:1000, limit_asks:1000}.merge(opts)
+    #Hashie::Mash.new()
+    (self.class.get(url, :headers => headers_for(url, options)).parsed_response)
   end
 
   def trades(opts={})
