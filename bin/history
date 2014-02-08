@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+require 'bitfinex'
+
+bfx = Bitfinex.new
+ts = Time.now.strftime("%Y%m%d%H%M%S")
+%w(btcusd ltcbtc ltcusd).each { |sym|
+  hist = bfx.history(sym:sym)
+  puts "History length: #{hist.length}"
+  #puts "first: #{hist.first}"
+  #puts "last: #{hist.last}"
+  open("history-#{sym}-#{ts}.csv", 'w+'){ |ff|
+    ff << "#price, amount, time, exchange, type\n"
+    hist.each { |tx|
+      ff << "#{tx.price}, #{tx.amount}, #{tx.time}, #{tx.exchange}, #{tx.type}\n"
+    }
+  }
+}
+

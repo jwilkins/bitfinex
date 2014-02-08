@@ -107,7 +107,7 @@ class Bitfinex
     pos
   end
 
-  # requests for credit
+  # requests for credit and offers that haven't been accepted
   def offers
     return nil unless have_key?
     url = "/v1/offers"
@@ -470,24 +470,9 @@ if __FILE__ == $0
   #puts bfx.candles
 
   #puts bfx.balances
-  %w(btcusd ltcbtc ltcusd).each { |sym|
-    hist = bfx.history(sym:sym)
-    #puts hist
-    puts "History length: #{hist.length}"
-    puts "first: #{hist.first}"
-    puts "last: #{hist.last}"
-    open("history-#{sym}.csv", 'w+'){ |ff|
-      ff << "#price, amount, time, exchange, type\n"
-      hist.each { |tx|
-        ff << "#{tx.price}, #{tx.amount}, #{tx.time}, #{tx.exchange}, #{tx.type}\n"
-      }
-    }
-    exit
-  }
-  exit
-  puts bfx.status(4627020)
-  puts bfx.cancel(4627020)
-  puts bfx.status(4627020)
+  #puts bfx.status(4627020)
+  #puts bfx.cancel(4627020)
+  #puts bfx.status(4627020)
   #puts bfx.order(0.001, 500)
 end
 
