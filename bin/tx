@@ -9,7 +9,7 @@ doc = <<DOCOPT
 #{__FILE__}
 
 Usage:
-  #{__FILE__} (buy|sell) <amount> [at <price>] [on (bitfinex|bitstamp)] [options]
+  #{__FILE__} (buy|sell) <amount> [at <price>] [options]
   #{__FILE__} -h | --help
   #{__FILE__} --version
 
@@ -22,6 +22,7 @@ Options:
   --version     Show version.
   -i <sec>      Time between sells [default: 15]
   -x <times>    Repeat the order [default: 1]
+  -e            Exchange order (Default is Margin)
   -m            Market order
   -f            Route sales only through Bitfinex
   -s            Route sales only through Bitstamp
@@ -43,9 +44,9 @@ begin
 
   opts = Docopt::docopt(doc)
   if(opts['buy'])
-    action = :buy
+    opts['-e'] ?  action = :buy_x : action = :buy
   elsif(opts['sell'])
-    action = :sell
+    opts['-e'] ?  action = :sell_x : action = :sell
   else
     raise "specify buy or sell"
   end
@@ -55,8 +56,8 @@ begin
   if(opts['at'])
     price = opts["<price>"].to_f 
   else
-    price = 1500 if action == :buy
-    price = 1 if action == :sell
+    price = 1500 if action == :buy || action == :buy_x
+    price = 1 if action == :sell || action == :sell_x
     opts['-m'] = true
   end
 
@@ -67,6 +68,8 @@ begin
   routing = 'bitfinex' if opts['bitfinex'] || opts['-f']
   routing = 'bitstamp' if opts['bitstamp'] || opts['-s']
 
+  account = 'margin' if action == :buy || action == :sell
+  account = 'exchange' if action == :buy_x || action == :sell_x
 rescue Docopt::Exit => e
   puts e.message
   exit
@@ -76,16 +79,19 @@ bfx = Bitfinex.new
 ticker = bfx.ticker
 
 puts "[*] timed_tx"
-puts "Will:"
-puts "  #{action} #{amount} BTC "
-puts "  @ $#{"%0.02f" % price} USD " if price
-puts "  current bid: #{ticker.bid}, ask: #{ticker.ask}"
-puts "  #{count} time(s)" if count > 1
-puts "  on #{routing} " if routing != 'all'
-puts "  1 order every #{interval} seconds" if count > 1
+puts "  Ticker: bid: #{ticker.bid}, ask: #{ticker.ask}"
+puts 
+puts "  Will use #{account} account to"
+puts "    #{action} #{amount} BTC "
+
+puts "    @ $#{"%0.02f" % price} USD " if price
+puts "    @ market" unless price
+
+puts "    #{count} time(s)" if count > 1
+puts "    on #{routing} " if routing != 'all'
+puts "    1 order every #{interval} seconds" if count > 1
 puts "pausing 10 seconds, hit ctrl-c to abort"
 sleep 10
-
 
 
 orders = []
@@ -125,6 +131,8 @@ count.times {
 }
 
 puts bfx.summarize_orders(orders)
+
+exit(0)  # so we can string conditionals in the shell
 
 # initial order response
 # =>  {"id"=>5421907, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334322.888538915", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0", "order_id"=>5421907}

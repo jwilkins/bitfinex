@@ -1,0 +1,136 @@
+#!/usr/bin/env ruby
+$: << File.join(File.dirname(__FILE__), '..', 'lib')
+$: << File.join(File.dirname(__FILE__))
+
+require 'bitfinex'
+require 'docopt'
+
+doc = <<DOCOPT
+#{__FILE__}
+
+Usage:
+  #{__FILE__} when (below|above) <target> (buy|sell) <amount> [at <price>] [options]
+  #{__FILE__} -h | --help
+  #{__FILE__} --version
+
+Example, try:
+  #{__FILE__} when below 620 buy 0.3 at 620
+  #{__FILE__} when above 900 sell 10 at 900.10
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+  -i <sec>      Time between sells [default: 15]
+  -x <times>    Repeat the order [default: 1]
+  -e            Exchange order (Default is Margin)
+  -m            Market order
+
+DOCOPT
+
+Signal.trap("INT") do
+  puts "\nQuitting .."
+  exit(-1)
+end
+
+begin
+  amount = 1
+  price = nil
+  action = :buy
+  count = 1
+  interval = 15
+  routing = 'all'
+  target = nil
+
+  opts = Docopt::docopt(doc)
+  if opts['above']
+    compare = :> 
+    compare_str = 'above'
+  elsif opts['below']
+    compare = :< 
+    compare_str = 'below'
+  end
+
+  target = opts["<target>"].to_f
+
+  if(opts['buy'])
+    opts['-e'] ?  action = :buy_x : action = :buy
+  elsif(opts['sell'])
+    opts['-e'] ?  action = :sell_x : action = :sell
+  else
+    raise "specify buy or sell"
+  end
+
+  amount = opts["<amount>"].to_f
+
+  if(opts['at'])
+    price = opts["<price>"].to_f 
+  else
+    price = 1500 if action == :buy || action == :buy_x
+    price = 1 if action == :sell || action == :sell_x
+    opts['-m'] = true
+  end
+
+rescue Docopt::Exit => e
+  puts e.message
+  exit
+end
+
+bfx = Bitfinex.new
+ticker = bfx.ticker
+
+puts "[*] txif"
+puts "Will:"
+puts "  #{action} #{amount} BTC "
+puts "  @ $#{"%0.02f" % price} USD " if price
+puts "  when price is #{compare_str} #{target}"
+puts "  current bid: #{ticker.bid}, ask: #{ticker.ask}"
+puts "pausing 10 seconds, hit ctrl-c to abort"
+sleep 10
+
+orders = []
+
+count.times {
+  started = Time.now
+  begin
+    res = bfx.send(action, amount, price, {routing: routing})
+    if res['message']
+      puts "Error: #{res['message']}"
+      exit
+    end
+  rescue => e
+    puts "Error: #{e}"
+  end
+
+  orderid = res['order_id']
+  orders << orderid
+  puts "Placed order #{orderid} (#{res['original_amount']}BTC @ #{"%0.02f" % res['price']}), waiting for completion .."
+
+  begin
+    sleep(6)
+    begin
+      res = bfx.status(orderid)
+    rescue => e
+      puts "Error: #{e}"
+    end
+    puts "  executed: #{"%0.06f" % res['executed_amount']}/remaining: #{"%0.06f" % res['remaining_amount']}"
+  end while(res['is_live']) 
+  #avg_price = res['avg_execution_price'].to_f
+  #total = (amount.to_f * avg_price)
+  #puts "  #{action} #{amount} at average price: #{"%0.02f" % avg_price} = #{"%0.02f" % total}"
+  puts "  #{bfx.summarize_orders([orderid])}"
+
+  wait_time = (interval - (Time.now - started))
+  sleep(wait_time) if wait_time > 0
+}
+
+puts bfx.summarize_orders(orders)
+
+# initial order response
+# =>  {"id"=>5421907, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334322.888538915", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0", "order_id"=>5421907}
+
+# status pending
+# => "id"=>5421963, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"0.0", "side"=>"buy", "type"=>"limit", "timestamp"=>"1389334540.0", "is_live"=>true, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.01", "executed_amount"=>"0.0"}
+
+# status executed
+# => {"id"=>5421963, "symbol"=>"btcusd", "exchange"=>nil, "price"=>"840.0", "avg_execution_price"=>"814.65", "side"=>"sell", "type"=>"limit", "timestamp"=>"1389334540.0", "is_live"=>false, "is_cancelled"=>false, "was_forced"=>false, "original_amount"=>"0.01", "remaining_amount"=>"0.0", "executed_amount"=>"0.01"}
+

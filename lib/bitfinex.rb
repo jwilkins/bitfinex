@@ -130,6 +130,18 @@ class Bitfinex
       self.class.post(url, :headers => headers_for(url)).parsed_response
   end
 
+  def transfer(opts={})
+    return nil unless have_key?
+    url = "/managewallets/create"
+    topts = {actionwallet:'TRANSFER',
+          amount:1.00,
+          currency:'USD',
+          walletfrom:'exchange',
+          walletto:'trading'}.merge(opts)
+    #begin
+    self.class.post(url, :headers => headers_for(url, topts)).parsed_response
+  end
+
   def history(opts={})
     return nil unless have_key?
     url = "/v1/mytrades"
@@ -236,6 +248,11 @@ class Bitfinex
     order(amount, price, oh)
   end
 
+  def sell_x(amount, price=nil, opts={})
+    oh = {side: 'sell', routing: 'all', type: 'exchange limit', hide: false}.merge(opts)
+    order(amount, price, oh)
+  end
+
   def buy_bstp(amount, price=nil, opts={})
     buy(amount, price, opts.merge({side:'buy', routing: 'bitstamp'}))
   end
@@ -246,6 +263,11 @@ class Bitfinex
 
   def buy(amount, price=nil, opts={})
     oh = {side: 'buy', routing: 'all', type: 'limit', hide: false}.merge(opts)
+    order(amount, price, oh)
+  end
+
+  def buy_x(amount, price=nil, opts={})
+    oh = {side: 'buy', routing: 'all', type: 'exchange limit', hide: false}.merge(opts)
     order(amount, price, oh)
   end
 
@@ -469,7 +491,10 @@ if __FILE__ == $0
   #puts bfx.today
   #puts bfx.candles
 
-  #puts bfx.balances
+  puts bfx.balances
+  puts bfx.transfer
+  puts bfx.balances
+
   #puts bfx.status(4627020)
   #puts bfx.cancel(4627020)
   #puts bfx.status(4627020)
