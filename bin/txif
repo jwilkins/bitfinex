@@ -89,6 +89,23 @@ sleep 10
 
 orders = []
 
+begin
+  ticker = bfx.ticker
+  if action == :buy || action == :buy_x
+    if target.send(compare) ticker.sell
+    break 
+    end
+    puts "#{ticker.sell} #{compare_str} #{target}"
+  elsif action == :sell || action == :sell_x
+    if ticker.buy.send(compare)(target)
+    break 
+    end
+    puts "#{ticker.buy} #{compare_str} #{target}"
+  else
+  end
+  sleep 10
+end
+
 count.times {
   started = Time.now
   begin

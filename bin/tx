@@ -56,7 +56,7 @@ begin
   if(opts['at'])
     price = opts["<price>"].to_f 
   else
-    price = 1500 if action == :buy || action == :buy_x
+    price = 700 if action == :buy || action == :buy_x
     price = 1 if action == :sell || action == :sell_x
     opts['-m'] = true
   end
@@ -91,7 +91,7 @@ puts "    #{count} time(s)" if count > 1
 puts "    on #{routing} " if routing != 'all'
 puts "    1 order every #{interval} seconds" if count > 1
 puts "pausing 10 seconds, hit ctrl-c to abort"
-sleep 10
+sleep 3
 
 
 orders = []
@@ -104,23 +104,29 @@ count.times {
       puts "Error: #{res['message']}"
       exit
     end
+    if res['order_id']
+      orderid = res['order_id']
+      orders << orderid
+      puts "Placed order #{orderid} (#{res['original_amount']}BTC @ "\
+           "#{"%0.02f" % res['price']}), waiting for completion .."
+    end
   rescue => e
     puts "Error: #{e}"
   end
 
-  orderid = res['order_id']
-  orders << orderid
-  puts "Placed order #{orderid} (#{res['original_amount']}BTC @ #{"%0.02f" % res['price']}), waiting for completion .."
 
-  begin
     sleep(6)
+  begin
     begin
       res = bfx.status(orderid)
     rescue => e
       puts "Error: #{e}"
+      puts bfx.balances
     end
-    puts "  executed: #{"%0.06f" % res['executed_amount']}/remaining: #{"%0.06f" % res['remaining_amount']}"
+    puts "  executed: #{"%0.06f" % res['executed_amount']}/"\
+          "remaining: #{"%0.06f" % res['remaining_amount']}"
   end while(res['is_live']) 
+
   #avg_price = res['avg_execution_price'].to_f
   #total = (amount.to_f * avg_price)
   #puts "  #{action} #{amount} at average price: #{"%0.02f" % avg_price} = #{"%0.02f" % total}"

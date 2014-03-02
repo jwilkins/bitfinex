@@ -267,6 +267,7 @@ class Bitfinex
   end
 
   def buy_x(amount, price=nil, opts={})
+    puts "Bitfinex.buy_x(#{amount}, #{price}}"
     oh = {side: 'buy', routing: 'all', type: 'exchange limit', hide: false}.merge(opts)
     order(amount, price, oh)
   end
