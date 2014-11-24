@@ -316,7 +316,8 @@ class Bitfinex
         raise  msg
       end
 
-      if res.parsed_response[0]['status'] == 'error' || res.parsed_response['status'] == 'error'
+      # This complex check is required while response content is not fixed
+      if (res.parsed_response.kind_of?(Array) && res.parsed_response[0]['status'] == 'error') || (!res.parsed_response.kind_of?(Array) && res.parsed_response['status'] == 'error')
         # Error in request parameters
         raise (defined? res.parsed_response[0]['status']) ? res.parsed_response[0]['status'] : res.parsed_response['status']
       end
