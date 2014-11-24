@@ -142,6 +142,26 @@ class Bitfinex
     self.class.post(url, :headers => headers_for(url, topts)).parsed_response
   end
 
+  # I have to give this method such name because 'history' is already occupied :/
+  # refactoring will break backward compatibility
+  def balance_history(opts={})
+    return nil unless have_key?
+    url = "/v1/history"
+    ho = {currency:'usd', limit: 500}.merge(opts)
+    options = {
+        'currency' => ho[:currency],
+        'limit' => ho[:limit]
+    }
+    begin
+
+      resp = self.class.post(url, :headers => headers_for(url, options)).parsed_response
+    rescue => e
+      puts e
+    end
+
+    resp
+  end
+
   def history(opts={})
     return nil unless have_key?
     url = "/v1/mytrades"
@@ -156,7 +176,7 @@ class Bitfinex
       resp = self.class.post(url, :headers => headers_for(url, options)).parsed_response
       resp.each { |tx|
         txm = Hashie::Mash.new(tx)
-        %w(price amount timestamp).each { |kk|
+        %w(price amount timestamp fee_amount).each { |kk|
           txm[kk] = tx[kk].to_f
         }
         txm.timestamp = Time.at(txm.timestamp.to_f)
@@ -271,6 +291,42 @@ class Bitfinex
     oh = {side: 'buy', routing: 'all', type: 'exchange limit', hide: false}.merge(opts)
     order(amount, price, oh)
   end
+
+
+  def withdraw(amount, address, type = 'bitcoin', wallet = 'exchange')
+    return nil unless have_key?
+    url = "/v1/withdraw"
+
+    options = {
+        withdraw_type: type,
+        walletselected: wallet,
+        amount:amount.to_s,
+        address: address
+    }
+
+    puts "withdraw(): options:#{options}" if @debug
+
+    begin
+      res = self.class.post(url, :headers => headers_for(url, options))
+
+      unless res.response.code == '200'
+        # Server error
+        msg = "Server returned #{res.response.code}"
+        msg = res.parsed_response['message'] if res.parsed_response['message']
+        raise  msg
+      end
+
+      if res.parsed_response[0]['status'] == 'error' || res.parsed_response['status'] == 'error'
+        # Error in request parameters
+        raise (defined? res.parsed_response[0]['status']) ? res.parsed_response[0]['status'] : res.parsed_response['status']
+      end
+    rescue => e
+      raise "Error submitting withdraw request: #{e}"
+    end
+
+    res.parsed_response
+  end
+
 
   def order(amount, price=nil, opts={})
     return nil unless have_key?
