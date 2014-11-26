@@ -202,7 +202,7 @@ class Bitfinex
     url = "/v1/order/status"
     oid = order_id.to_i
     options = {
-      "order_id" => oid
+      'order_id' => oid
     }
     response = self.class.post(url, :headers => headers_for(url, options)).parsed_response
     %w(price avg_execution_price timestamp
@@ -212,22 +212,17 @@ class Bitfinex
     response['timestamp'] = Time.at(response['timestamp'])
     om = Hashie::Mash.new(response)
 
-    # fix bitfinex bug with buy orders changing to sell after execution
-    # reset orders to initial side seen
-    if @buy_orders[oid]
-      om.side = 'buy'
-    elsif @sell_orders[oid]
-      om.side = 'sell'
-    else
+    if !@buy_orders[om.order_id] && !@sell_orders[om.order_id]
       # haven't seen this order before
-      if om.side = 'buy'
+      if om.side == 'buy'
         @buy_orders[oid] = om
-      elsif om.side = 'sell'
+      elsif om.side == 'sell'
         @sell_orders[oid] = om
       else
         raise "order #{oid} has side #{om.side} not buy or sell"
       end
     end
+
     om
   end
 
