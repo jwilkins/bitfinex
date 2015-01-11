@@ -73,7 +73,8 @@ class Bitfinex
     payload.merge!(options)
 
     payload_enc = Base64.encode64(payload.to_json).gsub(/\s/, '')
-    sig = OpenSSL::HMAC.hexdigest(payload_enc, @secret, Digest::SHA384)
+    digest = OpenSSL::Digest.new('sha384')
+    sig = OpenSSL::HMAC.hexdigest(digest, @secret, payload_enc)
 
     { 'Content-Type' => 'application/json',
       'Accept' => 'application/json',
