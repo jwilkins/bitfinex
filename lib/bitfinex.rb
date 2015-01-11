@@ -1,7 +1,5 @@
 require 'httparty'
 require 'json'
-require 'digest/sha2'
-require 'digest/hmac'
 require 'base64'
 require 'hashie'
 
@@ -75,7 +73,7 @@ class Bitfinex
     payload.merge!(options)
 
     payload_enc = Base64.encode64(payload.to_json).gsub(/\s/, '')
-    sig = Digest::HMAC.hexdigest(payload_enc, @secret, Digest::SHA384)
+    sig = OpenSSL::HMAC.hexdigest(payload_enc, @secret, Digest::SHA384)
 
     { 'Content-Type' => 'application/json',
       'Accept' => 'application/json',
