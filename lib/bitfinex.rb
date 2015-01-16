@@ -162,6 +162,27 @@ class Bitfinex
     resp
   end
 
+  def history_movements(opts={})
+    return nil unless have_key?
+    url = "/v1/history/movements"
+    ho = {currency:'usd'}.merge(opts)
+    options = {
+        :currency => ho[:currency]
+    }
+    %w(method since until limit).each { |optional_argument|
+      unless opts[optional_argument.to_sym].nil?
+        options[optional_argument] = opts[optional_argument.to_sym]
+      end
+    }
+    begin
+      resp = self.class.post(url, :headers => headers_for(url, options)).parsed_response
+    rescue => e
+      puts e
+    end
+
+    resp
+  end
+
   def history(opts={})
     return nil unless have_key?
     url = "/v1/mytrades"
