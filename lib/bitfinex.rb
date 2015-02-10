@@ -29,6 +29,9 @@ class Order
 end
 
 class Bitfinex
+  API_YAML_PATH = ENV['BITFINEX_KEYS_PATH'] ||
+      File.join(File.dirname(__FILE__), '..', 'config', 'api.yml')
+
   include HTTParty
   base_uri 'https://api.bitfinex.com'
   format :json
@@ -39,8 +42,8 @@ class Bitfinex
     @secret = secret
     unless have_key?
       begin
-        cfg_file = File.join(File.dirname(__FILE__), '..',
-                             'config', 'api.yml')
+        cfg_file = API_YAML_PATH
+
         api = YAML.load_file(cfg_file)
         @key = api['key']
         @secret = api['secret']
