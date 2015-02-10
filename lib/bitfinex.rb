@@ -226,7 +226,7 @@ class Bitfinex
     when ids.length > 1
       url = "/v1/order/cancel/multi"
       options = {
-        "order_ids" => "#{ids.join(',')}"
+        "order_ids" => ids
       }
     end
 
