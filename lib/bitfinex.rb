@@ -405,7 +405,7 @@ class Bitfinex
   def ticker(sym='btcusd', options={})
     return @ticker_info if @ticker_info && Time.now - @ticker_info.timestamp < 60
     #with_retries(:max_tries => 3) {
-      tick = Hashie::Mash.new(self.class.get("/v1/ticker/#{sym}", options).parsed_response)
+      tick = Hashie::Mash.new(self.class.get("/v1/pubticker/#{sym}", options).parsed_response)
       tick.keys.each { |kk|
         tick[kk] = tick[kk].to_f
       }
