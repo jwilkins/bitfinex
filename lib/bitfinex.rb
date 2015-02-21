@@ -1,7 +1,5 @@
 require 'httparty'
 require 'json'
-require 'digest/sha2'
-require 'digest/hmac'
 require 'base64'
 require 'hashie'
 
@@ -29,6 +27,9 @@ class Order
 end
 
 class Bitfinex
+  API_YAML_PATH = ENV['BITFINEX_KEYS_PATH'] ||
+      File.join(File.dirname(__FILE__), '..', 'config', 'api.yml')
+
   include HTTParty
   base_uri 'https://api.bitfinex.com'
   format :json
@@ -39,8 +40,8 @@ class Bitfinex
     @secret = secret
     unless have_key?
       begin
-        cfg_file = File.join(File.dirname(__FILE__), '..',
-                             'config', 'api.yml')
+        cfg_file = API_YAML_PATH
+
         api = YAML.load_file(cfg_file)
         @key = api['key']
         @secret = api['secret']
@@ -75,7 +76,8 @@ class Bitfinex
     payload.merge!(options)
 
     payload_enc = Base64.encode64(payload.to_json).gsub(/\s/, '')
-    sig = Digest::HMAC.hexdigest(payload_enc, @secret, Digest::SHA384)
+    digest = OpenSSL::Digest.new('sha384')
+    sig = OpenSSL::HMAC.hexdigest(digest, @secret, payload_enc)
 
     { 'Content-Type' => 'application/json',
       'Accept' => 'application/json',
@@ -105,6 +107,13 @@ class Bitfinex
     }
     #Hashie::Mash.new(pos)
     pos
+  end
+
+  def margin_infos
+    return nil unless have_key?
+    url = "/v1/margin_infos"
+    #Hashie::Mash.new(
+      self.class.post(url, :headers => headers_for(url)).parsed_response
   end
 
   # requests for credit and offers that haven't been accepted
@@ -262,7 +271,7 @@ class Bitfinex
     when ids.length > 1
       url = "/v1/order/cancel/multi"
       options = {
-        "order_ids" => "#{ids.join(',')}"
+        "order_ids" => ids
       }
     end
 
@@ -476,7 +485,7 @@ class Bitfinex
   def ticker(sym='btcusd', options={})
     return @ticker_info if @ticker_info && Time.now - @ticker_info.timestamp < 60
     #with_retries(:max_tries => 3) {
-      tick = Hashie::Mash.new(self.class.get("/v1/ticker/#{sym}", options).parsed_response)
+      tick = Hashie::Mash.new(self.class.get("/v1/pubticker/#{sym}", options).parsed_response)
       tick.keys.each { |kk|
         tick[kk] = tick[kk].to_f
       }
