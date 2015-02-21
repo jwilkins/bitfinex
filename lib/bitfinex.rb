@@ -109,6 +109,13 @@ class Bitfinex
     pos
   end
 
+  def margin_infos
+    return nil unless have_key?
+    url = "/v1/margin_infos"
+    #Hashie::Mash.new(
+      self.class.post(url, :headers => headers_for(url)).parsed_response
+  end
+
   # requests for credit and offers that haven't been accepted
   def offers
     return nil unless have_key?
